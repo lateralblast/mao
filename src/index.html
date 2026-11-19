@@ -7,19 +7,43 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <h1><span class="mark" aria-hidden="true"></span>mao</h1>
-      <p id="status" class="status"></p>
-    </header>
+    <div id="main-view">
+      <header>
+        <div class="title">
+          <h1><span class="mark" aria-hidden="true"></span>mao</h1>
+          <button id="info-open" class="info-button" type="button" aria-label="About mao" title="About mao">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4" />
+              <rect x="7.3" y="7" width="1.4" height="4.6" rx="0.7" fill="currentColor" />
+              <circle cx="8" cy="4.9" r="0.9" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+        <p id="status" class="status"></p>
+      </header>
 
-    <ul id="receivers" class="receivers" aria-label="Receivers"></ul>
+      <ul id="receivers" class="receivers" aria-label="Receivers"></ul>
 
-    <p id="error" class="error" hidden></p>
-    <p class="hint">Tick receivers to send your system audio to them as well as to this Mac.</p>
+      <p id="error" class="error" hidden></p>
+      <p class="hint">Audio plays only on the receivers and outputs you tick.</p>
 
-    <footer>
-      <button id="quit" type="button">Quit mao</button>
-    </footer>
+      <footer>
+        <button id="quit" type="button">Quit mao</button>
+      </footer>
+    </div>
+
+    <section id="info-view" class="info-view" hidden title="Click anywhere to go back">
+      <span class="mark large" aria-hidden="true"></span>
+      <h2>mao (Multi Audio/AirPlay Output)</h2>
+      <p id="version" class="version"></p>
+      <div id="login-setting" class="setting">
+        <label><input id="login-toggle" type="checkbox" /> Open mao at login</label>
+        <p id="login-note" class="hint" hidden></p>
+      </div>
+      <h3 id="help-title" class="help-title"></h3>
+      <div id="help" class="help"></div>
+      <p class="hint">Click anywhere to go back.</p>
+    </section>
 
     <script src="main.js"></script>
   </body>

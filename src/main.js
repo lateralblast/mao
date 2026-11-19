@@ -23,7 +23,7 @@ function render(status) {
   if (status.scanning) {
     statusLine.textContent = "Looking for AirPlay receivers…";
   } else if (count === 0) {
-    statusLine.textContent = "Off: audio plays on this Mac only";
+    statusLine.textContent = "Muted: nothing ticked, so no audio plays";
   } else {
     statusLine.textContent = `Sending to ${count} receiver${count === 1 ? "" : "s"}`;
   }
@@ -108,8 +108,129 @@ async function refresh() {
 
 document.getElementById("quit").addEventListener("click", () => invoke("quit_app"));
 
+const mainView = document.getElementById("main-view");
+const infoView = document.getElementById("info-view");
+
+function showInfo(about) {
+  refreshLoginItem();
+  document.getElementById("version").textContent = `Version ${about.version}`;
+  document.getElementById("help-title").textContent = about.help_title;
+  renderHelp(about.help);
+  mainView.hidden = true;
+  infoView.hidden = false;
+}
+
+function showMain() {
+  infoView.hidden = true;
+  mainView.hidden = false;
+}
+
+async function openInfo() {
+  try {
+    showInfo(await invoke("about"));
+  } catch (err) {
+    errorLine.hidden = false;
+    errorLine.textContent = String(err);
+  }
+}
+
+// Clicking anywhere in the info view returns to the main view.
+infoView.addEventListener("click", showMain);
+
+// Clicks on the login setting change it, so they must not also return to the main view.
+const loginSetting = document.getElementById("login-setting");
+const loginToggle = document.getElementById("login-toggle");
+const loginNote = document.getElementById("login-note");
+loginSetting.addEventListener("click", (event) => event.stopPropagation());
+
+async function refreshLoginItem() {
+  try {
+    const item = await invoke("login_item");
+    loginToggle.checked = item.enabled;
+    loginToggle.disabled = !item.available;
+    loginNote.hidden = item.available;
+    loginNote.textContent = item.available ? "" : "Available in the installed app.";
+  } catch (err) {
+    loginNote.hidden = false;
+    loginNote.textContent = String(err);
+  }
+}
+
+loginToggle.addEventListener("change", async () => {
+  loginNote.hidden = true;
+  try {
+    const item = await invoke("set_login_item", { enabled: loginToggle.checked });
+    loginToggle.checked = item.enabled;
+  } catch (err) {
+    loginToggle.checked = !loginToggle.checked;
+    loginNote.hidden = false;
+    loginNote.textContent = String(err);
+  }
+});
+document.getElementById("info-open").addEventListener("click", openInfo);
+
+// Turns the README section into paragraphs and bullet lists, without Markdown markup.
+function renderHelp(text) {
+  const nodes = [];
+  let list = null;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line === "") {
+      list = null;
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      if (!list) {
+        list = document.createElement("ul");
+        nodes.push(list);
+      }
+      const item = document.createElement("li");
+      appendWithLinks(item, plain(line.slice(2)));
+      list.append(item);
+      continue;
+    }
+    list = null;
+    const paragraph = document.createElement("p");
+    appendWithLinks(paragraph, plain(line));
+    nodes.push(paragraph);
+  }
+  document.getElementById("help").replaceChildren(...nodes);
+}
+
+// Adds text to `element`, turning any web address into a link that opens in the browser.
+function appendWithLinks(element, text) {
+  for (const part of text.split(/(https?:\/\/\S+)/)) {
+    if (/^https?:\/\//.test(part)) {
+      const link = document.createElement("a");
+      link.href = part;
+      link.textContent = part;
+      link.addEventListener("click", (event) => {
+        // Keep the info view open: only the link is followed.
+        event.preventDefault();
+        event.stopPropagation();
+        invoke("open_url", { url: part }).catch((err) => {
+          errorLine.hidden = false;
+          errorLine.textContent = String(err);
+        });
+      });
+      element.append(link);
+    } else if (part !== "") {
+      element.append(document.createTextNode(part));
+    }
+  }
+}
+
+function plain(markdown) {
+  return markdown
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1");
+}
+
 listen("status-changed", (event) => render(event.payload));
 listen("popover-opened", async () => {
+  showMain();
   await invoke("refresh_receivers");
   await refresh();
 });

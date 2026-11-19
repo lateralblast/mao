@@ -2,6 +2,7 @@
 
 mod controller;
 mod devices;
+mod login;
 mod paths;
 mod stream;
 
@@ -32,6 +33,77 @@ fn get_status(controller: State<Arc<Controller>>) -> Status {
 #[tauri::command]
 fn set_selected(identifiers: Vec<String>, app: AppHandle, controller: State<Arc<Controller>>) -> Result<Status, String> {
     controller.set_selected(&app, identifiers)
+}
+
+const README: &str = include_str!("../../README.md");
+const HELP_HEADING: &str = "Help Support Development";
+
+#[derive(serde::Serialize)]
+struct About {
+    version: &'static str,
+    help_title: &'static str,
+    help: String,
+}
+
+/// The lines under the README's "Help, support and development" heading, up to the next heading.
+fn help_section(readme: &str) -> String {
+    let mut lines = Vec::new();
+    let mut inside = false;
+    for line in readme.lines() {
+        if let Some(heading) = line.strip_prefix("## ") {
+            if inside {
+                break;
+            }
+            inside = heading.trim() == HELP_HEADING;
+            continue;
+        }
+        if inside {
+            lines.push(line);
+        }
+    }
+    lines.join("\n").trim().to_string()
+}
+
+#[tauri::command]
+fn about() -> About {
+    About {
+        version: env!("CARGO_PKG_VERSION"),
+        help_title: HELP_HEADING,
+        help: help_section(README),
+    }
+}
+
+/// Opens a web link in the default browser. Only http and https links are accepted.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("only web links can be opened".into());
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+struct LoginItem {
+    enabled: bool,
+    available: bool,
+}
+
+#[tauri::command]
+fn login_item() -> LoginItem {
+    LoginItem {
+        enabled: login::is_enabled(),
+        available: login::is_available(),
+    }
+}
+
+#[tauri::command]
+fn set_login_item(enabled: bool) -> Result<LoginItem, String> {
+    login::set_enabled(enabled)?;
+    Ok(login_item())
 }
 
 #[tauri::command]
@@ -135,7 +207,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {
@@ -155,6 +227,25 @@ pub fn run() {
                 app.state::<Arc<Controller>>().shutdown();
             }
         });
+}
+
+#[cfg(test)]
+mod help_tests {
+    use super::*;
+
+    #[test]
+    fn help_section_is_read_from_the_readme() {
+        let text = help_section(README);
+        assert!(text.starts_with("If you find this software useful"), "unexpected start: {text:?}");
+        assert!(text.contains("https://ko-fi.com/richardatlateralblast"));
+        assert!(!text.contains("## "), "section should stop at the next heading");
+    }
+
+    #[test]
+    fn help_section_stops_at_the_next_heading() {
+        let text = help_section("## Help Support Development\n\nHello\n## Next\nNot this");
+        assert_eq!(text, "Hello");
+    }
 }
 
 #[cfg(test)]

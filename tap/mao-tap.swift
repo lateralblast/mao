@@ -1,7 +1,8 @@
 // mao-tap: copies system audio to stdout as 48 kHz, 16-bit, stereo PCM.
 //
-// The tap leaves the normal output untouched, so the Mac still plays through
-// its own speakers. It runs until stdin closes (mao has exited) or it gets SIGTERM.
+// The tap mutes the Mac's own output while it runs, so audio only plays on the
+// devices mao sends it to. It runs until stdin closes (mao has exited) or it gets
+// SIGTERM, and the Mac's output returns to normal when it exits.
 
 import CoreAudio
 import Foundation
@@ -41,7 +42,7 @@ func writeAll(_ bytes: [Int16]) -> Bool {
 
 let tapDesc = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
 tapDesc.uuid = UUID()
-tapDesc.muteBehavior = .unmuted
+tapDesc.muteBehavior = .muted
 tapDesc.isPrivate = true
 
 var tapID = AudioObjectID(kAudioObjectUnknown)

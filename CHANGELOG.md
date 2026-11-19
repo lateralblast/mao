@@ -5,6 +5,76 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-19
+
+### Added
+
+- `mao` script at the repo root. `./mao` sets up what is missing, builds the app and opens it. `./mao --dev` runs the development build, and `./mao --stop` quits the running app.
+
+## [0.4.4] - 2026-11-19
+
+### Added
+
+- An *Open mao at login* switch on the info view. It writes or removes a LaunchAgent in `~/Library/LaunchAgents`, and it needs the installed app.
+
+## [0.4.3] - 2026-11-19
+
+### Changed
+
+- While mao runs, the Mac's own output is muted. Audio plays only on the receivers and outputs you tick, and with nothing ticked no audio plays.
+- The audio tap runs for the whole session. Changing the selection restarts only the streamer.
+
+### Fixed
+
+- The Mac's output no longer plays alongside a copy of itself when the Mac's speakers are ticked.
+
+## [0.4.2] - 2026-11-19
+
+### Changed
+
+- The info view's title reads "mao (Multi Audio/AirPlay Output)".
+
+## [0.4.1] - 2026-11-19
+
+### Changed
+
+- The name and version on the info view are centred.
+
+## [0.4.0] - 2026-11-19
+
+### Changed
+
+- The large icon on the info view is centred.
+
+## [0.3.9] - 2026-11-19
+
+### Changed
+
+- The info view shows a large version of the mao icon above the name.
+
+## [0.3.8] - 2026-11-19
+
+### Added
+
+- Web links in the info view open in the default browser.
+
+## [0.3.7] - 2026-11-19
+
+### Changed
+
+- The info view shows the support text from the README's "Help Support Development" section.
+
+### Fixed
+
+- The info view replaces the main view completely, so the receiver list no longer shows under it.
+- The Quit button sits at the bottom of the popover.
+
+## [0.3.6] - 2026-11-19
+
+### Added
+
+- An info button at the right of the popover header. It replaces the window with the version and the Help, support and development section of the README. Click anywhere in it to go back.
+
 ## [0.3.5] - 2026-11-19
 
 ### Changed

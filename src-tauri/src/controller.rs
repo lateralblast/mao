@@ -2,7 +2,7 @@
 //! and restarting the stream whenever the selection changes.
 
 use crate::paths;
-use crate::stream::{self, Receiver, Running};
+use crate::stream::{self, Receiver, Streamer, Tap};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -57,8 +57,13 @@ struct Inner {
     local_busy: bool,
     local_dirty: bool,
     links: BTreeMap<String, Link>,
-    running: Option<Running>,
-    /// Bumped on every restart, so late output from an old stream is ignored.
+    /// The system-audio tap. It runs for the whole session and mutes the Mac's output.
+    tap: Option<Tap>,
+    /// Bumped whenever the tap starts or stops, so a late exit report is ignored.
+    tap_generation: u64,
+    /// The streamer for the current selection. None when nothing is selected.
+    streamer: Option<Streamer>,
+    /// Bumped on every streamer restart, so late output from an old streamer is ignored.
     generation: u64,
     error: Option<String>,
 }
@@ -100,21 +105,23 @@ impl Controller {
         build_status(&inner)
     }
 
-    /// Resumes streaming to the receivers saved from the last launch.
+    /// Starts the tap and resumes the saved selection, at launch.
     pub fn start_saved(self: &Arc<Self>, app: &AppHandle) {
         let mut inner = self.lock();
-        self.restart_locked(app, &mut inner);
+        self.ensure_tap_locked(app, &mut inner);
+        self.restart_streamer_locked(app, &mut inner);
         drop(inner);
         let _ = app.emit(STATUS_EVENT, self.status());
     }
 
-    /// Replaces the selection with `identifiers` and restarts the stream.
+    /// Replaces the selection with `identifiers` and restarts the streamer.
     pub fn set_selected(self: &Arc<Self>, app: &AppHandle, identifiers: Vec<String>) -> Result<Status, String> {
         let mut inner = self.lock();
         let merged = merge_selection(&inner.saved.selected, &inner.available, &identifiers);
         inner.saved.selected = merged;
         self.save(&inner.saved)?;
-        self.restart_locked(app, &mut inner);
+        self.ensure_tap_locked(app, &mut inner);
+        self.restart_streamer_locked(app, &mut inner);
         let status = build_status(&inner);
         drop(inner);
         let _ = app.emit(STATUS_EVENT, status.clone());
@@ -204,18 +211,46 @@ impl Controller {
         }
     }
 
-    /// Stops streaming. Called when the app quits.
+    /// Stops the streamer and the tap. Called when the app quits. The Mac's output
+    /// returns to normal once the tap has stopped.
     pub fn shutdown(&self) {
         let mut inner = self.lock();
         inner.generation += 1;
-        if let Some(running) = inner.running.take() {
-            running.stop();
+        inner.tap_generation += 1;
+        if let Some(streamer) = inner.streamer.take() {
+            streamer.stop();
+        }
+        if let Some(tap) = inner.tap.take() {
+            tap.stop();
         }
     }
 
-    fn restart_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
-        if let Some(running) = inner.running.take() {
-            running.stop();
+    /// Starts the tap if it is not running. The tap mutes the Mac's own output.
+    fn ensure_tap_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
+        if inner.tap.is_some() {
+            return;
+        }
+        let Some(tap_binary) = paths::tap_binary() else {
+            inner.error = Some("the audio tap is missing from the app".into());
+            return;
+        };
+        inner.tap_generation += 1;
+        let generation = inner.tap_generation;
+        let controller = Arc::clone(self);
+        let exit_app = app.clone();
+        match stream::start_tap(&tap_binary, move || controller.on_tap_exit(&exit_app, generation)) {
+            Ok(tap) => inner.tap = Some(tap),
+            Err(error) => inner.error = Some(error),
+        }
+    }
+
+    /// Stops the current streamer and, if anything is selected, starts one for the selection.
+    fn restart_streamer_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
+        if let Some(tap) = inner.tap.as_ref() {
+            tap.detach();
+        }
+        if let Some(streamer) = inner.streamer.take() {
+            streamer.stop();
         }
         inner.generation += 1;
         inner.links.clear();
@@ -224,7 +259,7 @@ impl Controller {
             return;
         }
 
-        let (Some(tap), Some(script)) = (paths::tap_binary(), paths::stream_script(app)) else {
+        let (Some(tap), Some(script)) = (inner.tap.as_ref(), paths::stream_script(app)) else {
             inner.error = Some("the audio tap or streamer script is missing from the app".into());
             return;
         };
@@ -244,13 +279,8 @@ impl Controller {
             let app = app.clone();
             move |line: String| controller.on_line(&app, generation, &line)
         };
-        let on_tap_exit = {
-            let controller = Arc::clone(self);
-            let app = app.clone();
-            move || controller.on_tap_exit(&app, generation)
-        };
-        match stream::start(&tap, &paths::python(), &script, &inner.saved.selected, on_line, on_tap_exit) {
-            Ok(running) => inner.running = Some(running),
+        match stream::start_streamer(tap, &paths::python(), &script, &inner.saved.selected, on_line) {
+            Ok(streamer) => inner.streamer = Some(streamer),
             Err(error) => inner.error = Some(error),
         }
     }
@@ -286,12 +316,15 @@ impl Controller {
     fn on_tap_exit(&self, app: &AppHandle, generation: u64) {
         let status = {
             let mut inner = self.lock();
-            if inner.generation != generation {
+            if inner.tap_generation != generation {
                 return;
             }
-            inner.error = Some("system audio capture stopped; reselect a receiver to restart".into());
-            if let Some(running) = inner.running.take() {
-                running.stop();
+            inner.error = Some("system audio capture stopped; quit and reopen mao to resume".into());
+            if let Some(streamer) = inner.streamer.take() {
+                streamer.stop();
+            }
+            if let Some(tap) = inner.tap.take() {
+                tap.stop();
             }
             build_status(&inner)
         };
@@ -347,7 +380,7 @@ fn build_status(inner: &Inner) -> Status {
 
     Status {
         receivers,
-        active: inner.running.is_some(),
+        active: inner.streamer.is_some(),
         scanning: inner.scanning,
         error: inner.error.clone(),
     }
