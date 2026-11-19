@@ -1,6 +1,6 @@
 # mao
 
-Version: 0.4.5
+Version: 0.4.9
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS that sends your system audio to several AirPlay receivers, such as HomePods, at once, while your Mac keeps playing through its own speakers.
 
@@ -45,7 +45,7 @@ Each ticked receiver shows its state: connecting, streaming, ended or error. Hov
 - Changing the selection restarts the streamer. Receivers already playing drop out for a moment.
 - If a receiver drops off the network mid-stream, it stays in the error state until you untick and retick it.
 - While mao runs, the Mac's own output is muted. Quit mao to get normal playback back.
-- The Python environment is found through `MAO_PYTHON` or the path that `scripts/setup-python.sh` creates. A distributable bundle does not include Python yet.
+- The bundled streamer starts a little slower than a plain Python script, because PyInstaller unpacks it on each start.
 - Outputs on this Mac are played from a separate copy of the audio, so they can drift slightly from the default output.
 - Apple's private AirPlay code is not used. `pyatv` talks to receivers over AirPlay, so an Apple update could break it. Pin `pyatv` and `srptools` in `python/requirements.txt`.
 - macOS only.
@@ -55,6 +55,23 @@ Each ticked receiver shows its state: connecting, streaming, ended or error. Hov
 If you find this software useful and would like to support its development, please consider buying me a coffee:
 
 https://ko-fi.com/richardatlateralblast
+
+## Releases
+
+`./build.sh` builds `dist/mao_<version>_<arch>.dmg`, signed with the Developer ID certificate and notarised and stapled by default:
+
+```sh
+./build.sh --check          # show the signing identity, notary credentials and tools
+./build.sh                  # sign and notarise
+./build.sh --nonotarize     # sign only
+./build.sh --unsigned       # for local tests
+./build.sh --release        # tag v<version>, push it and create the GitHub release with the disk image
+./build.sh --delete-release # delete the GitHub release and its tag
+```
+
+Notarisation needs an App Store Connect API key (`APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_KEY_PATH`) or an Apple ID (`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). They come from the environment or from `~/.config/mao/notary.env`, and `~/.config/cheetoh/notary.env` is used if that is missing. `--release` needs the work committed and pushed, and `gh` logged in. Use `--dry-run` or `--draft` to check a release first.
+
+The app bundles its own Python: `scripts/build-streamer.sh` freezes the streamer with PyInstaller, so a released app needs no Python on the Mac it runs on.
 
 ## Open at login
 

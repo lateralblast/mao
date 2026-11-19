@@ -55,6 +55,8 @@ check_node_modules() {
 build_app() {
     say "building the audio tap"
     sh "$ROOT/scripts/build-tap.sh"
+    say "freezing the streamer"
+    sh "$ROOT/scripts/build-streamer.sh"
     say "building the app bundle"
     (cd "$ROOT" && npx tauri build --bundles app)
 }

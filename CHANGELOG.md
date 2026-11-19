@@ -5,6 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-11-19
+
+### Changed
+
+- The menu bar icon and the info view icon use the outline artwork, `mao-bw.png`. The app icon is unchanged.
+
+## [0.4.8] - 2026-11-19
+
+### Changed
+
+- The app icon, the installed app's icon and the menu bar icon use the new mao artwork. The menu bar icon is a silhouette, since macOS template icons are single-colour.
+
+## [0.4.7] - 2026-11-19
+
+### Changed
+
+- The streamer is frozen with PyInstaller (`scripts/build-streamer.sh`) and bundled in the app, so a released app needs no Python installed. The Python script remains the fallback when developing from the repo.
+
+## [0.4.6] - 2026-11-19
+
+### Added
+
+- `build.sh` builds the Developer ID signed disk image, notarises and staples it by default, and creates or deletes the GitHub release for a version.
+
 ## [0.4.5] - 2026-11-19
 
 ### Added

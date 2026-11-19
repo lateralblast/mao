@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Read, Write};
+use crate::paths::Streamer;
 use std::path::Path;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -88,12 +89,12 @@ pub fn start_tap(tap: &Path, on_exit: impl FnOnce() + Send + 'static) -> Result<
     Ok(Tap { child, stdin, feed })
 }
 
-/// A running Python streamer for a set of targets.
-pub struct Streamer {
+/// A running streamer for a set of targets.
+pub struct RunningStreamer {
     child: Child,
 }
 
-impl Streamer {
+impl RunningStreamer {
     pub fn stop(mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -104,21 +105,19 @@ impl Streamer {
 /// `on_line` gets each JSON line the streamer prints.
 pub fn start_streamer(
     tap: &Tap,
-    python: &Path,
-    script: &Path,
+    runner: &Streamer,
     receivers: &[Receiver],
     on_line: impl Fn(String) + Send + 'static,
-) -> Result<Streamer, String> {
+) -> Result<RunningStreamer, String> {
     let mut args: Vec<String> = vec!["stream".into()];
     args.extend(receivers.iter().map(target));
-    let mut child = Command::new(python)
-        .arg(script)
-        .args(&args)
+    let mut child = runner
+        .command(&args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("could not start the streamer ({}): {e}", python.display()))?;
+        .map_err(|e| format!("could not start the streamer: {e}"))?;
     let stdin = child.stdin.take().ok_or("no streamer stdin")?;
     let stdout = child.stdout.take().ok_or("no streamer stdout")?;
     let stderr = child.stderr.take().ok_or("no streamer stderr")?;
@@ -130,7 +129,7 @@ pub fn start_streamer(
         }
     });
     thread::spawn(move || log_lines("mao-stream", stderr));
-    Ok(Streamer { child })
+    Ok(RunningStreamer { child })
 }
 
 /// The argument the streamer expects for a target: `local:NAME`, or `IDENTIFIER=ADDRESS`.
@@ -154,22 +153,21 @@ fn log_lines(source: &str, reader: impl Read) {
 }
 
 /// Lists the AirPlay receivers on the network. Blocks for a few seconds.
-pub fn scan(python: &Path, script: &Path) -> Result<Vec<Receiver>, String> {
-    run_json(python, script, "scan")
+pub fn scan(runner: &Streamer) -> Result<Vec<Receiver>, String> {
+    run_json(runner, "scan")
 }
 
 /// Lists this Mac's output devices that can take a copy of the audio.
-pub fn local_devices(python: &Path, script: &Path) -> Result<Vec<Receiver>, String> {
-    run_json(python, script, "devices")
+pub fn local_devices(runner: &Streamer) -> Result<Vec<Receiver>, String> {
+    run_json(runner, "devices")
 }
 
-fn run_json(python: &Path, script: &Path, command: &str) -> Result<Vec<Receiver>, String> {
-    let output = Command::new(python)
-        .arg(script)
-        .arg(command)
+fn run_json(runner: &Streamer, command: &str) -> Result<Vec<Receiver>, String> {
+    let output = runner
+        .command(&[command.to_string()])
         .stderr(Stdio::piped())
         .output()
-        .map_err(|e| format!("could not run the streamer ({}): {e}", python.display()))?;
+        .map_err(|e| format!("could not run the streamer: {e}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let last = stderr.lines().last().unwrap_or("no output");
@@ -181,6 +179,7 @@ fn run_json(python: &Path, script: &Path, command: &str) -> Result<Vec<Receiver>
 #[cfg(test)]
 mod hardware_tests {
     use super::*;
+    use std::path::PathBuf;
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
@@ -190,8 +189,10 @@ mod hardware_tests {
     #[ignore]
     fn streams_to_a_receiver() {
         let tap_path = crate::paths::tap_binary().expect("the tap binary is built");
-        let python = crate::paths::python();
-        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("python").join("mao_stream.py");
+        let runner = Streamer::Script {
+            python: PathBuf::from(std::env::var("MAO_PYTHON").expect("set MAO_PYTHON to the mao environment's python")),
+            script: Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("python").join("mao_stream.py"),
+        };
         let receiver = Receiver {
             identifier: "B2:5B:17:C7:B2:04".into(),
             name: "Kitchen".into(),
@@ -200,7 +201,7 @@ mod hardware_tests {
 
         let tap = start_tap(&tap_path, || {}).expect("start tap");
         let (tx, rx) = mpsc::channel();
-        let streamer = start_streamer(&tap, &python, &script, &[receiver], move |line| {
+        let streamer = start_streamer(&tap, &runner, &[receiver], move |line| {
             let _ = tx.send(line);
         })
         .expect("start streaming");

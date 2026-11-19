@@ -1,0 +1,2 @@
+# PyInstaller freezes the streamer into one executable for the app bundle (see scripts/build-streamer.sh).
+pyinstaller==6.22.3

@@ -2,7 +2,7 @@
 //! and restarting the stream whenever the selection changes.
 
 use crate::paths;
-use crate::stream::{self, Receiver, Streamer, Tap};
+use crate::stream::{self, Receiver, RunningStreamer, Tap};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -62,7 +62,7 @@ struct Inner {
     /// Bumped whenever the tap starts or stops, so a late exit report is ignored.
     tap_generation: u64,
     /// The streamer for the current selection. None when nothing is selected.
-    streamer: Option<Streamer>,
+    streamer: Option<RunningStreamer>,
     /// Bumped on every streamer restart, so late output from an old streamer is ignored.
     generation: u64,
     error: Option<String>,
@@ -142,16 +142,16 @@ impl Controller {
         let controller = Arc::clone(self);
         let app = app.clone();
         std::thread::spawn(move || {
-            let result = match (paths::stream_script(&app), paths::python()) {
-                (Some(script), python) => {
+            let result = match paths::streamer(&app) {
+                Some(runner) => {
                     // Local devices are cheap to list, so a failure there is not fatal.
-                    let local = stream::local_devices(&python, &script).unwrap_or_default();
-                    stream::scan(&python, &script).map(|mut found| {
+                    let local = stream::local_devices(&runner).unwrap_or_default();
+                    stream::scan(&runner).map(|mut found| {
                         found.extend(local);
                         found
                     })
                 }
-                (None, _) => Err("could not find python/mao_stream.py".to_string()),
+                None => Err("the streamer is missing from the app".to_string()),
             };
             {
                 let mut inner = controller.lock();
@@ -189,9 +189,9 @@ impl Controller {
             inner.local_busy = true;
         }
         loop {
-            let result = match paths::stream_script(app) {
-                Some(script) => stream::local_devices(&paths::python(), &script),
-                None => Err("could not find python/mao_stream.py".to_string()),
+            let result = match paths::streamer(app) {
+                Some(runner) => stream::local_devices(&runner),
+                None => Err("the streamer is missing from the app".to_string()),
             };
             let mut inner = self.lock();
             if let Ok(local) = result {
@@ -259,8 +259,8 @@ impl Controller {
             return;
         }
 
-        let (Some(tap), Some(script)) = (inner.tap.as_ref(), paths::stream_script(app)) else {
-            inner.error = Some("the audio tap or streamer script is missing from the app".into());
+        let (Some(tap), Some(runner)) = (inner.tap.as_ref(), paths::streamer(app)) else {
+            inner.error = Some("the audio tap or streamer is missing from the app".into());
             return;
         };
         for receiver in &inner.saved.selected {
@@ -279,7 +279,7 @@ impl Controller {
             let app = app.clone();
             move |line: String| controller.on_line(&app, generation, &line)
         };
-        match stream::start_streamer(tap, &paths::python(), &script, &inner.saved.selected, on_line) {
+        match stream::start_streamer(tap, &runner, &inner.saved.selected, on_line) {
             Ok(streamer) => inner.streamer = Some(streamer),
             Err(error) => inner.error = Some(error),
         }
