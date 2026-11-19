@@ -33,6 +33,12 @@ The first time mao captures audio, macOS asks for permission to capture system a
 
 ## Using mao
 
+<p align="center">
+  <img src="docs/mao-popover.png" alt="The mao popover, with placeholder device names" width="300">
+  <br>
+  <em>The popover. The device names are placeholders.</em>
+</p>
+
 Click the mao icon in the menu bar. The popover lists the AirPlay receivers on your network and the outputs on this Mac (marked *this Mac*). Tick a receiver to send audio to it, and untick it to stop. Your selection is saved and resumed on the next launch.
 
 - **AirPlay receivers** can be ticked in any number, together with one output on this Mac.
