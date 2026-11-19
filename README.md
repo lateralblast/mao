@@ -1,6 +1,6 @@
 # mao
 
-Version: 0.3.0
+Version: 0.3.5
 
 mao (Multi AirPlay Output) is a menu bar app for macOS that sends your system audio to several AirPlay receivers, such as HomePods, at once, while your Mac keeps playing through its own speakers.
 
@@ -28,7 +28,7 @@ The first time mao captures audio, macOS asks for permission to capture system a
 
 ## Using mao
 
-Click the mao icon in the menu bar. The popover lists the AirPlay receivers on your network, and the outputs on this Mac (marked *this Mac*). Tick one to send audio to it, and untick it to stop. Your selection is saved and resumed on the next launch.
+Click the mao icon in the menu bar. Quit mao from the button at the bottom of the popover. The popover lists the AirPlay receivers on your network, and the outputs on this Mac (marked *this Mac*). Devices appear and disappear as you plug them in or unplug them, without restarting mao. AirPlay receivers are rediscovered when the popover opens. Tick one to send audio to it, and untick it to stop. Your selection is saved and resumed on the next launch.
 
 Each ticked receiver shows its state: connecting, streaming, ended or error. Hover over an error for the reason.
 
@@ -44,7 +44,7 @@ Each ticked receiver shows its state: connecting, streaming, ended or error. Hov
 - Changing the selection restarts the stream. Receivers already playing drop out for a moment.
 - If a receiver drops off the network mid-stream, it stays in the error state until you untick and retick it.
 - The Python environment is found through `MAO_PYTHON` or the path that `scripts/setup-python.sh` creates. A distributable bundle does not include Python yet.
-- The Mac's current output is not offered as a target, because it already plays the audio. Changing the default output changes which devices are offered.
+- If the Mac's current output is also a target, the audio plays there twice, slightly offset. Untick it, or change the default output, to avoid the echo.
 - Outputs on this Mac are played from a separate copy of the audio, so they can drift slightly from the default output.
 - Apple's private AirPlay code is not used. `pyatv` talks to receivers over AirPlay, so an Apple update could break it. Pin `pyatv` and `srptools` in `python/requirements.txt`.
 - macOS only.

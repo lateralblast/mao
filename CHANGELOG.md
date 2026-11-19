@@ -5,12 +5,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-19
+
+### Changed
+
+- The popover header shows the mao icon before the word "mao".
+
+## [0.3.4] - 2026-11-19
+
+### Added
+
+- Outputs on this Mac update as devices are plugged in or removed. mao listens for CoreAudio device-list changes (`src-tauri/src/devices.rs`), so headphones appear without restarting.
+
+## [0.3.3] - 2026-11-19
+
+### Added
+
+- A Quit button at the bottom of the popover. It stops the audio helpers and exits, as the tray menu's Quit does.
+
+## [0.3.2] - 2026-11-19
+
+### Fixed
+
+- The Mac's current output, such as its built-in speakers, is now listed as a target. Previously it was left out, which hid it whenever it was the default output.
+
+## [0.3.1] - 2026-11-19
+
+### Changed
+
+- The menu bar icon is now the mao artwork, drawn as a template image so it follows light and dark menu bars.
+
 ## [0.3.0] - 2026-11-19
 
 ### Added
 
 - Outputs on this Mac, such as headphones and other audio interfaces, can be ticked as targets, alongside AirPlay receivers. They are marked "this Mac".
-- `mao_stream.py devices` lists them. The Mac's current default output is left out, because it already plays the audio.
+- `mao_stream.py devices` lists them.
 - `sounddevice` 0.5.6 is pinned in `python/requirements.txt`.
 
 ## [0.2.0] - 2026-11-19

@@ -5,7 +5,7 @@
         Print the AirPlay receivers on the local network as a JSON list.
 
     mao_stream.py devices
-        Print this Mac's output devices (other than the current default) as a JSON list.
+        Print this Mac's output devices as a JSON list.
 
     mao_stream.py stream TARGET [TARGET ...]
         Read 48 kHz, 16-bit, stereo PCM from stdin and send it to each target.
@@ -163,14 +163,13 @@ LOCAL_PREFIX = "local:"
 
 
 def local_devices():
-    """This Mac's output devices, except the current default (it already plays there)."""
+    """This Mac's output devices that can take a copy of the audio."""
     import sounddevice as sd
 
-    default_name = sd.query_devices(sd.default.device[1])["name"]
     devices, seen = [], set()
     for info in sd.query_devices():
         name = info["name"]
-        if info["max_output_channels"] < CHANNELS or name == default_name or name in seen:
+        if info["max_output_channels"] < CHANNELS or name in seen:
             continue
         seen.add(name)
         devices.append({"identifier": LOCAL_PREFIX + name, "name": name, "address": ""})

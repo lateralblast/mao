@@ -106,6 +106,8 @@ async function refresh() {
   }
 }
 
+document.getElementById("quit").addEventListener("click", () => invoke("quit_app"));
+
 listen("status-changed", (event) => render(event.payload));
 listen("popover-opened", async () => {
   await invoke("refresh_receivers");

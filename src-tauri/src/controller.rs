@@ -53,6 +53,9 @@ struct Inner {
     saved: Saved,
     available: Vec<Receiver>,
     scanning: bool,
+    /// A local refresh is in progress, and another was asked for while it ran.
+    local_busy: bool,
+    local_dirty: bool,
     links: BTreeMap<String, Link>,
     running: Option<Running>,
     /// Bumped on every restart, so late output from an old stream is ignored.
@@ -165,6 +168,40 @@ impl Controller {
             }
             let _ = app.emit(STATUS_EVENT, controller.status());
         });
+    }
+
+    /// Re-reads this Mac's outputs, for when a device is plugged in or removed.
+    /// Quick, so it does not touch the AirPlay list.
+    pub fn refresh_local(self: &Arc<Self>, app: &AppHandle) {
+        {
+            let mut inner = self.lock();
+            if inner.local_busy {
+                inner.local_dirty = true;
+                return;
+            }
+            inner.local_busy = true;
+        }
+        loop {
+            let result = match paths::stream_script(app) {
+                Some(script) => stream::local_devices(&paths::python(), &script),
+                None => Err("could not find python/mao_stream.py".to_string()),
+            };
+            let mut inner = self.lock();
+            if let Ok(local) = result {
+                inner.available.retain(|r| !stream::is_local(&r.identifier));
+                inner.available.extend(dedupe(local));
+            }
+            if inner.local_dirty {
+                // Another change arrived while we were reading: read again.
+                inner.local_dirty = false;
+                continue;
+            }
+            inner.local_busy = false;
+            let status = build_status(&inner);
+            drop(inner);
+            let _ = app.emit(STATUS_EVENT, status);
+            return;
+        }
     }
 
     /// Stops streaming. Called when the app quits.

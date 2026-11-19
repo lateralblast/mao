@@ -1,6 +1,7 @@
 //! mao: a menu bar app that sends system audio to several AirPlay receivers at once.
 
 mod controller;
+mod devices;
 mod paths;
 mod stream;
 
@@ -31,6 +32,11 @@ fn get_status(controller: State<Arc<Controller>>) -> Status {
 #[tauri::command]
 fn set_selected(identifiers: Vec<String>, app: AppHandle, controller: State<Arc<Controller>>) -> Result<Status, String> {
     controller.set_selected(&app, identifiers)
+}
+
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]
@@ -111,13 +117,25 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     controller.start_saved(&handle);
     controller.refresh_scan(&handle);
 
+    // Re-read this Mac's outputs whenever one is plugged in or removed.
+    let watched = Arc::clone(&controller);
+    let watched_handle = handle.clone();
+    if let Err(error) = devices::watch(move || {
+        // Runs on a Core Audio thread, so hand the work to another thread.
+        let controller = Arc::clone(&watched);
+        let app = watched_handle.clone();
+        std::thread::spawn(move || controller.refresh_local(&app));
+    }) {
+        eprintln!("mao: {error}");
+    }
+
     Ok(())
 }
 
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {

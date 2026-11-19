@@ -59,6 +59,19 @@ header h1 {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The menu bar artwork, drawn in the text colour so it works in light and dark mode. */
+.mark {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  background: var(--fg);
+  -webkit-mask: url(mao-icon.png) center / contain no-repeat;
+  mask: url(mao-icon.png) center / contain no-repeat;
 }
 
 .status {
@@ -137,4 +150,23 @@ header h1 {
 
 .receivers .tag.state-error {
   color: var(--error);
+}
+
+footer {
+  margin-top: 2px;
+}
+
+#quit {
+  width: 100%;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--row);
+  color: var(--fg);
+  font: inherit;
+  cursor: default;
+}
+
+#quit:hover {
+  background: var(--border);
 }
