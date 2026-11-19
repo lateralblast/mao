@@ -166,7 +166,9 @@ build_dmg() {
     say "building the app and disk image"
     local stamp
     stamp=$(mktemp)
-    (cd "$ROOT" && env ${unset[@]+"${unset[@]}"} ${set[@]+"${set[@]}"} npx tauri build --bundles app,dmg)
+    # Tauri warns that it skips notarising the app when no notary variables are set. That is the
+    # intent of --nonotarize, so the line is dropped. The build's own exit status still counts.
+    (cd "$ROOT" && env ${unset[@]+"${unset[@]}"} ${set[@]+"${set[@]}"} npx tauri build --bundles app,dmg 2>&1 | sed '/skipping app notarization/d')
 
     local dmg
     dmg=$(find "$BUNDLE/dmg" -maxdepth 1 -name '*.dmg' -newer "$stamp" 2>/dev/null | head -1)

@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-11-20
+
+### Fixed
+
+- `build.sh --nonotarize` no longer prints Tauri's "skipping app notarization" warning, which is expected for that build.
+
 ## [0.5.8] - 2026-11-20
 
 ### Changed
