@@ -1,3 +1,5 @@
+<img src="mao.png" alt="mao" width="110" align="right">
+
 # mao
 
 Version: 0.5.7
