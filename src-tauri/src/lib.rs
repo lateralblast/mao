@@ -248,7 +248,7 @@ mod help_tests {
     #[test]
     fn attribution_is_read_from_the_readme() {
         let text = readme_section(README, ATTRIBUTION_HEADING);
-        assert!(text.contains("Magnific - Flaticon"), "unexpected attribution: {text:?}");
+        assert!(text.contains("MEDZ - Flaticon"), "unexpected attribution: {text:?}");
     }
 
     #[test]
