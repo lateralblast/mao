@@ -125,6 +125,7 @@ function showInfo(about) {
   document.getElementById("version").textContent = `Version ${about.version}`;
   document.getElementById("help-title").textContent = about.help_title;
   renderHelp(about.help);
+  renderBlock("attribution", about.attribution);
   mainView.hidden = true;
   infoView.hidden = false;
 }
@@ -178,8 +179,12 @@ loginToggle.addEventListener("change", async () => {
 });
 document.getElementById("info-open").addEventListener("click", openInfo);
 
-// Turns the README section into paragraphs and bullet lists, without Markdown markup.
+// Turns a README section into paragraphs and bullet lists, without Markdown markup.
 function renderHelp(text) {
+  renderBlock("help", text);
+}
+
+function renderBlock(id, text) {
   const nodes = [];
   let list = null;
   for (const raw of text.split("\n")) {
@@ -203,7 +208,7 @@ function renderHelp(text) {
     appendWithLinks(paragraph, plain(line));
     nodes.push(paragraph);
   }
-  document.getElementById("help").replaceChildren(...nodes);
+  document.getElementById(id).replaceChildren(...nodes);
 }
 
 // Adds text to `element`, turning any web address into a link that opens in the browser.
@@ -231,7 +236,7 @@ function appendWithLinks(element, text) {
 
 function plain(markdown) {
   return markdown
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1");

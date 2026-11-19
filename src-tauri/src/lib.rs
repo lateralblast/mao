@@ -38,23 +38,26 @@ fn set_selected(identifiers: Vec<String>, app: AppHandle, controller: State<Arc<
 const README: &str = include_str!("../../README.md");
 const HELP_HEADING: &str = "Help Support Development";
 
+const ATTRIBUTION_HEADING: &str = "Attribution";
+
 #[derive(serde::Serialize)]
 struct About {
     version: &'static str,
     help_title: &'static str,
     help: String,
+    attribution: String,
 }
 
-/// The lines under the README's "Help, support and development" heading, up to the next heading.
-fn help_section(readme: &str) -> String {
+/// The lines under the README heading `heading`, up to the next heading.
+fn readme_section(readme: &str, heading: &str) -> String {
     let mut lines = Vec::new();
     let mut inside = false;
     for line in readme.lines() {
-        if let Some(heading) = line.strip_prefix("## ") {
+        if let Some(title) = line.strip_prefix("## ") {
             if inside {
                 break;
             }
-            inside = heading.trim() == HELP_HEADING;
+            inside = title.trim() == heading;
             continue;
         }
         if inside {
@@ -69,7 +72,8 @@ fn about() -> About {
     About {
         version: env!("CARGO_PKG_VERSION"),
         help_title: HELP_HEADING,
-        help: help_section(README),
+        help: readme_section(README, HELP_HEADING),
+        attribution: readme_section(README, ATTRIBUTION_HEADING),
     }
 }
 
@@ -235,15 +239,21 @@ mod help_tests {
 
     #[test]
     fn help_section_is_read_from_the_readme() {
-        let text = help_section(README);
+        let text = readme_section(README, HELP_HEADING);
         assert!(text.starts_with("If you find this software useful"), "unexpected start: {text:?}");
         assert!(text.contains("https://ko-fi.com/richardatlateralblast"));
         assert!(!text.contains("## "), "section should stop at the next heading");
     }
 
     #[test]
+    fn attribution_is_read_from_the_readme() {
+        let text = readme_section(README, ATTRIBUTION_HEADING);
+        assert!(text.contains("Magnific - Flaticon"), "unexpected attribution: {text:?}");
+    }
+
+    #[test]
     fn help_section_stops_at_the_next_heading() {
-        let text = help_section("## Help Support Development\n\nHello\n## Next\nNot this");
+        let text = readme_section("## Help Support Development\n\nHello\n## Next\nNot this", HELP_HEADING);
         assert_eq!(text, "Hello");
     }
 }

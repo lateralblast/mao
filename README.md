@@ -1,6 +1,6 @@
 # mao
 
-Version: 0.5.4
+Version: 0.5.7
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -12,6 +12,7 @@ Requirements: macOS 14.2 or later (for the system-audio tap), Xcode command line
 ./mao                # set up what is missing, build the app and open it
 ./mao --dev          # run the development build
 ./mao --stop         # quit the running app
+./mao --version      # print the version
 ```
 
 The lower-level steps are `npm install`, `scripts/setup-python.sh` (the Python environment used to build the streamer), `npm run dev`, `npm run build`, and `npm test` (the Rust and Python tests).
@@ -79,3 +80,7 @@ The info view has an *Open mao at login* switch. It writes a LaunchAgent to `~/L
 If you find this software useful and would like to support its development, please consider buying me a coffee:
 
 https://ko-fi.com/richardatlateralblast
+
+## Attribution
+
+Cat icons created by [Magnific - Flaticon](https://www.flaticon.com/free-icons/cat)

@@ -4,6 +4,7 @@
 #   ./mao           set up anything missing, build the app bundle and open it
 #   ./mao --dev     run the development build (npm run dev)
 #   ./mao --stop    quit the running app
+#   ./mao --version print the version
 #   ./mao --help    show this help
 set -eu
 
@@ -12,6 +13,7 @@ PYTHON="$HOME/Library/Application Support/au.com.lateralblast.mao/venv/bin/pytho
 APP="$ROOT/src-tauri/target/release/bundle/macos/mao.app"
 
 say() { printf 'mao: %s\n' "$*"; }
+version() { sed -n 's/^  "version": "\([^"]*\)".*/\1/p' "$ROOT/package.json" | head -1; }
 fail() { printf 'mao: %s\n' "$*" >&2; exit 1; }
 
 need() {
@@ -19,7 +21,7 @@ need() {
 }
 
 usage() {
-    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 stop() {
@@ -71,6 +73,9 @@ run_app() {
 case "${1:-}" in
     --help|-h)
         usage
+        ;;
+    --version|-V)
+        printf 'mao %s\n' "$(version)"
         ;;
     --stop)
         stop

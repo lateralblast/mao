@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-20
+
+### Added
+
+- `./mao --version` prints the version, read from `package.json`.
+
+## [0.5.6] - 2026-11-20
+
+### Added
+
+- The info view shows the Attribution section from the README, below the Help Support Development text, with a space above it.
+
+## [0.5.5] - 2026-11-20
+
+### Changed
+
+- More space on the info view: between the version and the *Open mao at login* switch, and between the switch and the text below it.
+
 ## [0.5.4] - 2026-11-20
 
 ### Changed

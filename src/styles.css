@@ -118,7 +118,7 @@ header .title {
 }
 
 .info-view .version {
-  margin: 2px 0 10px;
+  margin: 2px 0 16px;
   color: var(--muted);
   font-size: 12px;
   text-align: center;
@@ -263,7 +263,7 @@ footer {
 }
 
 .info-view .setting {
-  margin: 0 0 10px;
+  margin: 0 0 16px;
   font-size: 12px;
   cursor: default;
 }
@@ -281,4 +281,8 @@ footer {
 
 .info-view .setting .hint {
   margin: 4px 0 0;
+}
+
+.info-view .attribution-title {
+  margin-top: 16px;
 }
