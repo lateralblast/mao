@@ -8,6 +8,12 @@ mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac'
 
 ## Quick start
 
+<p align="center">
+  <img src="docs/mao-installer.png" alt="The mao disk image: drag mao into Applications" width="360">
+  <br>
+  <em>The disk image. Drag mao into Applications.</em>
+</p>
+
 Requirements: macOS 14.2 or later (for the system-audio tap), Xcode command line tools (for `swiftc`), [Rust](https://rustup.rs), Node.js with npm, and Homebrew Python 3.12.
 
 ```sh
