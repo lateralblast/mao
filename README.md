@@ -50,43 +50,9 @@ Each ticked receiver shows its state: connecting, streaming, ended or error. Hov
 - Apple's private AirPlay code is not used. `pyatv` talks to receivers over AirPlay, so an Apple update could break it. Pin `pyatv` and `srptools` in `python/requirements.txt`.
 - macOS only.
 
-## Help Support Development
-
-If you find this software useful and would like to support its development, please consider buying me a coffee:
-
-https://ko-fi.com/richardatlateralblast
-
-## Releases
-
-`./build.sh` builds `dist/mao_<version>_<arch>.dmg`, signed with the Developer ID certificate and notarised and stapled by default:
-
-```sh
-./build.sh --check          # show the signing identity, notary credentials and tools
-./build.sh                  # sign and notarise
-./build.sh --nonotarize     # sign only
-./build.sh --unsigned       # for local tests
-./build.sh --release        # tag v<version>, push it and create the GitHub release with the disk image
-./build.sh --delete-release # delete the GitHub release and its tag
-```
-
-Notarisation needs an App Store Connect API key (`APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_KEY_PATH`) or an Apple ID (`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`). They come from the environment or from `~/.config/mao/notary.env`, and `~/.config/cheetoh/notary.env` is used if that is missing. `--release` needs the work committed and pushed, and `gh` logged in. Use `--dry-run` or `--draft` to check a release first.
-
-The app bundles its own Python: `scripts/build-streamer.sh` freezes the streamer with PyInstaller, so a released app needs no Python on the Mac it runs on.
-
 ## Open at login
 
 The info view has an *Open mao at login* switch. It works by writing a LaunchAgent to `~/Library/LaunchAgents/au.com.lateralblast.mao.plist`, which opens the installed app quietly at login. The switch needs the installed app, so it is disabled when running from a build directory.
-
-## Project layout
-
-- `src/`: the popover interface (HTML, CSS and JavaScript, with no build step).
-- `src-tauri/src/lib.rs`: the menu bar icon, the popover window and the Tauri commands.
-- `src-tauri/src/controller.rs`: the saved selection, receiver states and restarting the stream.
-- `src-tauri/src/stream.rs`: runs the tap and the streamer, and connects them.
-- `src-tauri/src/paths.rs`: finds the helpers, both in a built app and in the repo.
-- `tap/mao-tap.swift`: the system-audio capture helper.
-- `python/mao_stream.py`: discovery and streaming, with tests in `python/test_mao_stream.py`.
-- `scripts/`: build and setup scripts.
 
 ## Help Support Development
 
