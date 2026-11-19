@@ -1,0 +1,23 @@
+[package]
+name = "mao"
+version = "0.3.0"
+description = "Multi AirPlay Output: send system audio to several AirPlay receivers at once"
+edition = "2021"
+publish = false
+
+[lib]
+name = "mao_lib"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "mao"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+

@@ -1,0 +1,140 @@
+:root {
+  --bg: #f5f5f7;
+  --fg: #1d1d1f;
+  --muted: #6e6e73;
+  --row: #ffffff;
+  --border: #d2d2d7;
+  --accent: #0a84ff;
+  --error: #d70015;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1e1e1f;
+    --fg: #f5f5f7;
+    --muted: #98989d;
+    --row: #2c2c2e;
+    --border: #3a3a3c;
+    --accent: #0a84ff;
+    --error: #ff6961;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1e1e1f;
+  --fg: #f5f5f7;
+  --muted: #98989d;
+  --row: #2c2c2e;
+  --border: #3a3a3c;
+  --accent: #0a84ff;
+  --error: #ff6961;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.status {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.receivers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.receivers li + li {
+  border-top: 1px solid var(--border);
+}
+
+.receivers label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: default;
+}
+
+.receivers input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.receivers .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receivers .tag {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.receivers .unavailable .name {
+  color: var(--muted);
+}
+
+.receivers .empty {
+  padding: 12px 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font-size: 12px;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.receivers .tag.state-streaming {
+  color: var(--accent);
+}
+
+.receivers .tag.state-error {
+  color: var(--error);
+}

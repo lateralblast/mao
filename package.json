@@ -1,0 +1,15 @@
+{
+  "name": "mao",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Multi AirPlay Output: send system audio to several AirPlay receivers at once",
+  "scripts": {
+    "setup:python": "sh scripts/setup-python.sh",
+    "dev": "sh scripts/build-tap.sh && tauri dev",
+    "build": "sh scripts/build-tap.sh && tauri build",
+    "test": "sh scripts/build-tap.sh && cargo test --manifest-path src-tauri/Cargo.toml && python3 -m unittest discover -s python -p 'test_*.py'"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.6"
+  }
+}
