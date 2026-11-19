@@ -52,9 +52,14 @@ impl Tap {
     }
 }
 
-/// Starts the tap. `on_exit` runs if the tap stops before it is stopped.
-pub fn start_tap(tap: &Path, on_exit: impl FnOnce() + Send + 'static) -> Result<Tap, String> {
-    let mut child = Command::new(tap)
+/// Starts the tap. With `pass`, the Mac's output plays; otherwise it is muted. `on_exit` runs if
+/// the tap stops before it is stopped.
+pub fn start_tap(tap: &Path, pass: bool, on_exit: impl FnOnce() + Send + 'static) -> Result<Tap, String> {
+    let mut child = Command::new(tap);
+    if pass {
+        child.arg("--pass");
+    }
+    let mut child = child
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -101,7 +106,7 @@ impl RunningStreamer {
     }
 }
 
-/// Starts the streamer for `receivers` and attaches it to the tap.
+/// Starts the streamer for AirPlay `receivers` and attaches it to the tap.
 /// `on_line` gets each JSON line the streamer prints.
 pub fn start_streamer(
     tap: &Tap,
@@ -132,18 +137,47 @@ pub fn start_streamer(
     Ok(RunningStreamer { child })
 }
 
-/// The argument the streamer expects for a target: `local:NAME`, or `IDENTIFIER=ADDRESS`.
+/// The argument the streamer expects for an AirPlay receiver: `IDENTIFIER=ADDRESS`.
 fn target(receiver: &Receiver) -> String {
-    if is_local(&receiver.identifier) {
-        receiver.identifier.clone()
-    } else {
-        format!("{}={}", receiver.identifier, receiver.address)
-    }
+    format!("{}={}", receiver.identifier, receiver.address)
 }
 
 /// Whether an identifier names an output device on this Mac rather than an AirPlay receiver.
 pub fn is_local(identifier: &str) -> bool {
     identifier.starts_with("local:")
+}
+
+/// The uid of a local output identifier (`local:<uid>`).
+pub fn local_uid(identifier: &str) -> Option<&str> {
+    identifier.strip_prefix("local:")
+}
+
+/// The UID of the Mac's system output.
+pub fn system_output(tap: &Path) -> Result<String, String> {
+    let output = Command::new(tap)
+        .arg("output")
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not read the system output: {e}"))?;
+    if !output.status.success() {
+        return Err("could not read the system output".into());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Makes the output device `uid` the Mac's system output.
+pub fn set_system_output(tap: &Path, uid: &str) -> Result<(), String> {
+    let output = Command::new(tap)
+        .arg("set-output")
+        .arg(uid)
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not set the system output: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!("could not switch the Mac's output to {uid}"))
+    }
 }
 
 fn log_lines(source: &str, reader: impl Read) {
@@ -157,9 +191,17 @@ pub fn scan(runner: &Streamer) -> Result<Vec<Receiver>, String> {
     run_json(runner, "scan")
 }
 
-/// Lists this Mac's output devices that can take a copy of the audio.
-pub fn local_devices(runner: &Streamer) -> Result<Vec<Receiver>, String> {
-    run_json(runner, "devices")
+/// Lists this Mac's output devices, as the tap helper reports them.
+pub fn local_devices(tap: &Path) -> Result<Vec<Receiver>, String> {
+    let output = Command::new(tap)
+        .arg("devices")
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not list the outputs: {e}"))?;
+    if !output.status.success() {
+        return Err("could not list the outputs".into());
+    }
+    serde_json::from_slice(&output.stdout).map_err(|e| format!("could not read the outputs: {e}"))
 }
 
 fn run_json(runner: &Streamer, command: &str) -> Result<Vec<Receiver>, String> {
@@ -199,7 +241,7 @@ mod hardware_tests {
             address: "192.168.1.62".into(),
         };
 
-        let tap = start_tap(&tap_path, || {}).expect("start tap");
+        let tap = start_tap(&tap_path, false, || {}).expect("start tap");
         let (tx, rx) = mpsc::channel();
         let streamer = start_streamer(&tap, &runner, &[receiver], move |line| {
             let _ = tx.send(line);

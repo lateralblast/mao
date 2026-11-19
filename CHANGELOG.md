@@ -5,6 +5,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-20
+
+### Changed
+
+- Outputs on this Mac: one can be ticked at a time. It becomes the Mac's system output, and macOS plays through it directly. The copying players are gone, and their Core Audio routing was not reliable.
+- The Mac's own output is no longer muted when a local output is ticked. It is muted whenever only AirPlay receivers or nothing is selected, so unticked outputs stay silent.
+
+## [0.5.3] - 2026-11-20
+
+### Fixed
+
+- Audio from the built-in outputs (headphones and speakers) was mixed with the Mac's microphone, which is part of those devices' input. The capture now reads only the tap's channels, so the microphone is no longer played as noise.
+
+## [0.5.2] - 2026-11-20
+
+### Fixed
+
+- Headphones and speakers selected on their own played nothing. The capture helper ran alongside the local players on the same device, so it now runs only when an AirPlay receiver is selected, or when nothing is selected (to keep the Mac silent).
+
+## [0.5.1] - 2026-11-20
+
+### Changed
+
+- Outputs on this Mac (speakers, headphones and other devices) are played by the tap helper, `mao-tap play <device>`, through Core Audio on the device's own clock. AirPlay receivers still go through the streamer. The Python audio library is no longer used.
+- The helper lists this Mac's outputs (`mao-tap devices`), and the streamer only handles AirPlay receivers.
+- Saved selections of outputs on this Mac are matched to the current device with the same name.
+
+### Fixed
+
+- Speakers and headphones selected in mao played nothing. The Python route's device buffer ran dry on nearly every write.
+
+## [0.5.0] - 2026-11-20
+
+### Fixed
+
+- This Mac's outputs (the speakers, headphones and other devices) played nothing although they showed "streaming". The local output buffer was too small for audio arriving in real time and ran dry on nearly every write, so it now uses a larger buffer.
+
 ## [0.4.9] - 2026-11-19
 
 ### Changed

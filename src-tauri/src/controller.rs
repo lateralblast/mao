@@ -1,5 +1,11 @@
-//! The saved receiver selection, what the streamer reports about each receiver,
-//! and restarting the stream whenever the selection changes.
+//! The saved selection, what the streamer and the outputs report, and keeping the Mac's
+//! audio routing in line with the selection.
+//!
+//! - AirPlay receivers: the capture tap feeds one streamer for all of them.
+//! - One output on this Mac: it becomes the Mac's system output, and macOS plays through it.
+//!   The capture tap then passes the Mac's output through, instead of muting it.
+//! - Nothing selected, or only AirPlay: the capture tap mutes the Mac's output, so nothing
+//!   plays on this Mac.
 
 use crate::paths;
 use crate::stream::{self, Receiver, RunningStreamer, Tap};
@@ -17,6 +23,10 @@ pub const STATUS_EVENT: &str = "status-changed";
 #[serde(rename_all = "camelCase")]
 struct Saved {
     selected: Vec<Receiver>,
+    /// The system output before mao switched it to a local output. Restored when that
+    /// output is unticked, and when mao quits.
+    #[serde(default)]
+    original_output: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -57,11 +67,13 @@ struct Inner {
     local_busy: bool,
     local_dirty: bool,
     links: BTreeMap<String, Link>,
-    /// The system-audio tap. It runs for the whole session and mutes the Mac's output.
+    /// The capture tap. It runs while AirPlay or nothing is selected.
     tap: Option<Tap>,
+    /// Whether the running tap passes the Mac's output through (true) or mutes it (false).
+    tap_pass: bool,
     /// Bumped whenever the tap starts or stops, so a late exit report is ignored.
     tap_generation: u64,
-    /// The streamer for the current selection. None when nothing is selected.
+    /// The streamer for the selected AirPlay receivers. None when none is selected.
     streamer: Option<RunningStreamer>,
     /// Bumped on every streamer restart, so late output from an old streamer is ignored.
     generation: u64,
@@ -105,23 +117,26 @@ impl Controller {
         build_status(&inner)
     }
 
-    /// Starts the tap and resumes the saved selection, at launch.
+    /// Starts the saved selection, at launch.
     pub fn start_saved(self: &Arc<Self>, app: &AppHandle) {
         let mut inner = self.lock();
-        self.ensure_tap_locked(app, &mut inner);
-        self.restart_streamer_locked(app, &mut inner);
+        self.sync_locked(app, &mut inner);
         drop(inner);
         let _ = app.emit(STATUS_EVENT, self.status());
     }
 
-    /// Replaces the selection with `identifiers` and restarts the streamer.
+    /// Replaces the selection with `identifiers` and brings the Mac's routing in line with it.
+    /// At most one output on this Mac is kept: the last one given.
     pub fn set_selected(self: &Arc<Self>, app: &AppHandle, identifiers: Vec<String>) -> Result<Status, String> {
         let mut inner = self.lock();
-        let merged = merge_selection(&inner.saved.selected, &inner.available, &identifiers);
+        let mut wanted = identifiers;
+        if let Some(last_local) = wanted.iter().rev().find(|id| stream::is_local(id)).cloned() {
+            wanted.retain(|id| !stream::is_local(id) || *id == last_local);
+        }
+        let merged = merge_selection(&inner.saved.selected, &inner.available, &wanted);
         inner.saved.selected = merged;
         self.save(&inner.saved)?;
-        self.ensure_tap_locked(app, &mut inner);
-        self.restart_streamer_locked(app, &mut inner);
+        self.sync_locked(app, &mut inner);
         let status = build_status(&inner);
         drop(inner);
         let _ = app.emit(STATUS_EVENT, status.clone());
@@ -142,15 +157,14 @@ impl Controller {
         let controller = Arc::clone(self);
         let app = app.clone();
         std::thread::spawn(move || {
+            let local = paths::tap_binary()
+                .map(|tap| stream::local_devices(&tap).unwrap_or_default())
+                .unwrap_or_default();
             let result = match paths::streamer(&app) {
-                Some(runner) => {
-                    // Local devices are cheap to list, so a failure there is not fatal.
-                    let local = stream::local_devices(&runner).unwrap_or_default();
-                    stream::scan(&runner).map(|mut found| {
-                        found.extend(local);
-                        found
-                    })
-                }
+                Some(runner) => stream::scan(&runner).map(|mut found| {
+                    found.extend(local.clone());
+                    found
+                }),
                 None => Err("the streamer is missing from the app".to_string()),
             };
             {
@@ -166,6 +180,9 @@ impl Controller {
                                 saved.address = fresh.address.clone();
                                 saved.name = fresh.name.clone();
                             }
+                        }
+                        if remap_local(&mut inner.saved.selected, &available) {
+                            controller.sync_locked(&app, &mut inner);
                         }
                         let saved = inner.saved.clone();
                         let _ = controller.save(&saved);
@@ -189,14 +206,13 @@ impl Controller {
             inner.local_busy = true;
         }
         loop {
-            let result = match paths::streamer(app) {
-                Some(runner) => stream::local_devices(&runner),
-                None => Err("the streamer is missing from the app".to_string()),
+            let result = match paths::tap_binary() {
+                Some(tap) => stream::local_devices(&tap),
+                None => Err("the audio tap is missing from the app".to_string()),
             };
             let mut inner = self.lock();
             if let Ok(local) = result {
-                inner.available.retain(|r| !stream::is_local(&r.identifier));
-                inner.available.extend(dedupe(local));
+                self.set_local_locked(app, &mut inner, local);
             }
             if inner.local_dirty {
                 // Another change arrived while we were reading: read again.
@@ -211,8 +227,19 @@ impl Controller {
         }
     }
 
-    /// Stops the streamer and the tap. Called when the app quits. The Mac's output
-    /// returns to normal once the tap has stopped.
+    /// Records the outputs on this Mac. A saved selection that moved to a new identifier is
+    /// remapped, and the routing is brought in line with it.
+    fn set_local_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner, local: Vec<Receiver>) {
+        inner.available.retain(|r| !stream::is_local(&r.identifier));
+        inner.available.extend(dedupe(local));
+        if remap_local(&mut inner.saved.selected, &inner.available) {
+            let saved = inner.saved.clone();
+            let _ = self.save(&saved);
+            self.sync_locked(app, inner);
+        }
+    }
+
+    /// Stops the tap, and restores the system output if mao changed it. Called when the app quits.
     pub fn shutdown(&self) {
         let mut inner = self.lock();
         inner.generation += 1;
@@ -223,12 +250,17 @@ impl Controller {
         if let Some(tap) = inner.tap.take() {
             tap.stop();
         }
+        restore_output_locked(self, &mut inner);
     }
 
-    /// Starts the tap if it is not running. The tap mutes the Mac's own output.
-    fn ensure_tap_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
-        if inner.tap.is_some() {
+    /// Starts the capture tap. `pass` lets the Mac's output play; otherwise it is muted.
+    fn ensure_tap_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner, pass: bool) {
+        if inner.tap.is_some() && inner.tap_pass == pass {
             return;
+        }
+        if let Some(tap) = inner.tap.take() {
+            inner.tap_generation += 1;
+            tap.stop();
         }
         let Some(tap_binary) = paths::tap_binary() else {
             inner.error = Some("the audio tap is missing from the app".into());
@@ -238,14 +270,17 @@ impl Controller {
         let generation = inner.tap_generation;
         let controller = Arc::clone(self);
         let exit_app = app.clone();
-        match stream::start_tap(&tap_binary, move || controller.on_tap_exit(&exit_app, generation)) {
-            Ok(tap) => inner.tap = Some(tap),
+        match stream::start_tap(&tap_binary, pass, move || controller.on_tap_exit(&exit_app, generation)) {
+            Ok(tap) => {
+                inner.tap = Some(tap);
+                inner.tap_pass = pass;
+            }
             Err(error) => inner.error = Some(error),
         }
     }
 
-    /// Stops the current streamer and, if anything is selected, starts one for the selection.
-    fn restart_streamer_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
+    /// Brings the capture tap, the streamer and the Mac's output in line with the selection.
+    fn sync_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
         if let Some(tap) = inner.tap.as_ref() {
             tap.detach();
         }
@@ -253,17 +288,31 @@ impl Controller {
             streamer.stop();
         }
         inner.generation += 1;
-        inner.links.clear();
         inner.error = None;
-        if inner.saved.selected.is_empty() {
-            return;
+
+        let selected: Vec<String> = inner.saved.selected.iter().map(|r| r.identifier.clone()).collect();
+        inner.links.retain(|identifier, _| selected.contains(identifier));
+
+        let airplay: Vec<Receiver> = inner
+            .saved
+            .selected
+            .iter()
+            .filter(|r| !stream::is_local(&r.identifier))
+            .cloned()
+            .collect();
+        let local: Option<String> = selected.iter().find(|id| stream::is_local(id)).cloned();
+
+        // The capture tap feeds AirPlay, and mutes the Mac's output when nothing is selected.
+        // With a local output, the Mac's output plays, so the tap passes it through.
+        let needs_capture = !airplay.is_empty() || selected.is_empty();
+        if needs_capture {
+            self.ensure_tap_locked(app, inner, local.is_some());
+        } else if let Some(tap) = inner.tap.take() {
+            inner.tap_generation += 1;
+            tap.stop();
         }
 
-        let (Some(tap), Some(runner)) = (inner.tap.as_ref(), paths::streamer(app)) else {
-            inner.error = Some("the audio tap or streamer is missing from the app".into());
-            return;
-        };
-        for receiver in &inner.saved.selected {
+        for receiver in &airplay {
             inner.links.insert(
                 receiver.identifier.clone(),
                 Link {
@@ -272,16 +321,60 @@ impl Controller {
                 },
             );
         }
+        if !airplay.is_empty() {
+            match (inner.tap.as_ref(), paths::streamer(app)) {
+                (Some(tap), Some(runner)) => {
+                    let generation = inner.generation;
+                    let controller = Arc::clone(self);
+                    let event_app = app.clone();
+                    let on_line = move |line: String| controller.on_line(&event_app, generation, &line);
+                    match stream::start_streamer(tap, &runner, &airplay, on_line) {
+                        Ok(streamer) => inner.streamer = Some(streamer),
+                        Err(error) => inner.error = Some(error),
+                    }
+                }
+                _ => inner.error = Some("the audio tap or streamer is missing from the app".into()),
+            }
+        }
 
-        let generation = inner.generation;
-        let on_line = {
-            let controller = Arc::clone(self);
-            let app = app.clone();
-            move |line: String| controller.on_line(&app, generation, &line)
-        };
-        match stream::start_streamer(tap, &runner, &inner.saved.selected, on_line) {
-            Ok(streamer) => inner.streamer = Some(streamer),
-            Err(error) => inner.error = Some(error),
+        match local {
+            Some(identifier) => {
+                let uid = stream::local_uid(&identifier).unwrap_or_default().to_string();
+                let current = paths::tap_binary().and_then(|tap| stream::system_output(&tap).ok());
+                // Remember the output the Mac had before mao changed it.
+                if inner.saved.original_output.is_none() {
+                    if let Some(current) = current.filter(|current| *current != uid) {
+                        inner.saved.original_output = Some(current);
+                        let saved = inner.saved.clone();
+                        let _ = self.save(&saved);
+                    }
+                }
+                let result = paths::tap_binary()
+                    .ok_or_else(|| "the audio tap is missing from the app".to_string())
+                    .and_then(|tap| stream::set_system_output(&tap, &uid));
+                match result {
+                    Ok(()) => {
+                        inner.links.insert(
+                            identifier.clone(),
+                            Link {
+                                state: "streaming".into(),
+                                message: String::new(),
+                            },
+                        );
+                    }
+                    Err(error) => {
+                        inner.error = Some(error.clone());
+                        inner.links.insert(
+                            identifier.clone(),
+                            Link {
+                                state: "error".into(),
+                                message: error,
+                            },
+                        );
+                    }
+                }
+            }
+            None => restore_output_locked(self, inner),
         }
     }
 
@@ -329,6 +422,21 @@ impl Controller {
             build_status(&inner)
         };
         let _ = app.emit(STATUS_EVENT, status);
+    }
+}
+
+/// Puts back the system output that mao changed, if it changed one. Forgets it either way.
+fn restore_output_locked(controller: &Controller, inner: &mut Inner) {
+    let Some(original) = inner.saved.original_output.take() else {
+        return;
+    };
+    let saved = inner.saved.clone();
+    let _ = controller.save(&saved);
+    let restored = paths::tap_binary()
+        .ok_or_else(|| "the audio tap is missing from the app".to_string())
+        .and_then(|tap| stream::set_system_output(&tap, &original));
+    if let Err(error) = restored {
+        inner.error = Some(error);
     }
 }
 
@@ -380,7 +488,7 @@ fn build_status(inner: &Inner) -> Status {
 
     Status {
         receivers,
-        active: inner.streamer.is_some(),
+        active: inner.streamer.is_some() || inner.saved.selected.iter().any(|r| stream::is_local(&r.identifier)),
         scanning: inner.scanning,
         error: inner.error.clone(),
     }
@@ -402,6 +510,26 @@ pub fn merge_selection(saved: &[Receiver], available: &[Receiver], wanted: &[Str
         }
     }
     merged
+}
+
+/// A saved local selection can carry an identifier from an older version, or a device
+/// that now has another identifier. This points each such selection at the current output
+/// with the same name. Returns whether anything changed.
+pub fn remap_local(saved: &mut [Receiver], available: &[Receiver]) -> bool {
+    let mut changed = false;
+    for receiver in saved.iter_mut() {
+        if !stream::is_local(&receiver.identifier) || available.iter().any(|a| a.identifier == receiver.identifier) {
+            continue;
+        }
+        if let Some(found) = available
+            .iter()
+            .find(|a| stream::is_local(&a.identifier) && a.name == receiver.name)
+        {
+            receiver.identifier = found.identifier.clone();
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// One entry per receiver. Discovery can report the same device at several addresses.
@@ -455,6 +583,7 @@ mod tests {
         let inner = Inner {
             saved: Saved {
                 selected: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("C", "Study", "10.0.0.3")],
+                original_output: None,
             },
             available: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("B", "Lounge", "10.0.0.2")],
             links: BTreeMap::from([(
@@ -477,6 +606,23 @@ mod tests {
         assert!(study.selected && !study.available);
         assert_eq!(study.state, "unavailable");
         assert!(!status.active);
+    }
+
+    #[test]
+    fn remap_moves_a_saved_local_output_to_its_current_identifier() {
+        let mut saved = vec![receiver("local:External Headphones", "External Headphones", "")];
+        let available = vec![receiver("local:BuiltInHeadphoneOutputDevice", "External Headphones", "")];
+        assert!(remap_local(&mut saved, &available));
+        assert_eq!(saved[0].identifier, "local:BuiltInHeadphoneOutputDevice");
+        assert!(!remap_local(&mut saved, &available), "a second pass changes nothing");
+    }
+
+    #[test]
+    fn remap_leaves_airplay_and_missing_outputs_alone() {
+        let mut saved = vec![receiver("B2:5B", "Kitchen", "10.0.0.1"), receiver("local:Gone", "Gone", "")];
+        let available = vec![receiver("local:Other", "Other", "")];
+        assert!(!remap_local(&mut saved, &available));
+        assert_eq!(saved[1].identifier, "local:Gone");
     }
 
     #[test]

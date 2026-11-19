@@ -1,4 +1,3 @@
 # pyatv 0.18 needs srptools 1.x. srptools 2.x changed its constructor and breaks pairing.
 pyatv==0.18.0
 srptools==1.0.1
-sounddevice==0.5.6

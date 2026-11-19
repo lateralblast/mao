@@ -37,6 +37,11 @@ class HeaderTests(unittest.TestCase):
         self.assertEqual((channels, rate, bits), (2, 48000, 16))
 
 
+class DiscoveryTests(unittest.TestCase):
+    def test_this_mac_has_local_addresses(self):
+        self.assertTrue(m.local_addresses())
+
+
 class PaceTests(unittest.TestCase):
     def test_pace_ends_every_output_with_none(self):
         source = queue.Queue()

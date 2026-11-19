@@ -82,8 +82,17 @@ function renderRow(receiver) {
 
 async function toggle(identifier, on) {
   const selected = new Set(current ? current.receivers.filter((r) => r.selected).map((r) => r.identifier) : []);
-  if (on) selected.add(identifier);
-  else selected.delete(identifier);
+  if (on) {
+    // Only one output on this Mac can be the system output, so ticking one unticks the others.
+    if (identifier.startsWith("local:")) {
+      for (const id of [...selected]) {
+        if (id.startsWith("local:")) selected.delete(id);
+      }
+    }
+    selected.add(identifier);
+  } else {
+    selected.delete(identifier);
+  }
 
   busy = true;
   try {

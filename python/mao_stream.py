@@ -4,13 +4,10 @@
     mao_stream.py scan
         Print the AirPlay receivers on the local network as a JSON list.
 
-    mao_stream.py devices
-        Print this Mac's output devices as a JSON list.
-
-    mao_stream.py stream TARGET [TARGET ...]
-        Read 48 kHz, 16-bit, stereo PCM from stdin and send it to each target.
-        A target is IDENTIFIER=ADDRESS for an AirPlay receiver, or local:NAME
-        for a device on this Mac. Exits when stdin closes.
+    mao_stream.py stream IDENTIFIER=ADDRESS [IDENTIFIER=ADDRESS ...]
+        Read 48 kHz, 16-bit, stereo PCM from stdin and stream it to each AirPlay
+        receiver. Exits when stdin closes. Outputs on this Mac are played by
+        the tap helper (mao-tap play), not here.
 
 Progress goes to stdout as one JSON object per line, for example:
     {"event": "receiver", "identifier": "...", "state": "streaming", "message": ""}
@@ -159,58 +156,6 @@ def write_receiver(out, fd, ready):
         os.close(fd)
 
 
-LOCAL_PREFIX = "local:"
-
-
-def local_devices():
-    """This Mac's output devices that can take a copy of the audio."""
-    import sounddevice as sd
-
-    devices, seen = [], set()
-    for info in sd.query_devices():
-        name = info["name"]
-        if info["max_output_channels"] < CHANNELS or name in seen:
-            continue
-        seen.add(name)
-        devices.append({"identifier": LOCAL_PREFIX + name, "name": name, "address": ""})
-    return devices
-
-
-def play_local(out, name, ready):
-    """Play the copied audio through one of this Mac's output devices.
-
-    The device's own clock paces the writes, so this thread blocks in the
-    stream's write call and the queue absorbs any short stalls."""
-    import sounddevice as sd
-
-    identifier = LOCAL_PREFIX + name
-    try:
-        stream = sd.RawOutputStream(
-            device=name, samplerate=RATE, channels=CHANNELS, dtype="int16", latency="low"
-        )
-        stream.start()
-    except Exception as error:
-        emit("receiver", identifier=identifier, state="error", message=describe(error))
-        while out.get() is not None:
-            pass
-        return
-
-    ready.set()
-    emit("receiver", identifier=identifier, state="streaming", message="")
-    try:
-        while True:
-            chunk = out.get()
-            if chunk is None:
-                break
-            stream.write(chunk)
-        emit("receiver", identifier=identifier, state="ended", message="")
-    except Exception as error:
-        emit("receiver", identifier=identifier, state="error", message=describe(error))
-    finally:
-        stream.stop()
-        stream.close()
-
-
 async def stream_receiver(loop, identifier, address, reader, ready):
     emit("receiver", identifier=identifier, state="connecting", message="")
     try:
@@ -245,27 +190,19 @@ def cmd_stream(args):
     source = queue.Queue()
     threading.Thread(target=read_stdin, args=(source,), daemon=True).start()
 
-    outputs, airplay, local = [], [], []
+    outputs, specs = [], []
     for arg in args:
-        out = queue.Queue(maxsize=RECEIVER_QUEUE_TICKS)
-        outputs.append(out)
-        if arg.startswith(LOCAL_PREFIX):
-            ready = threading.Event()
-            threading.Thread(target=play_local, args=(out, arg[len(LOCAL_PREFIX):], ready), daemon=True).start()
-            continue
         identifier, _, address = arg.partition("=")
         read_fd, write_fd = os.pipe()
         reader = io.BufferedReader(io.FileIO(read_fd, "rb"))
+        out = queue.Queue(maxsize=RECEIVER_QUEUE_TICKS)
         ready = threading.Event()
         threading.Thread(target=write_receiver, args=(out, write_fd, ready), daemon=True).start()
-        airplay.append((identifier, address, reader, ready))
+        outputs.append(out)
+        specs.append((identifier, address, reader, ready))
 
     threading.Thread(target=pace, args=(source, outputs), daemon=True).start()
-    if airplay:
-        asyncio.run(stream_all(airplay))
-    else:
-        # Only local outputs: nothing to wait for but the pacer, which ends at stdin EOF.
-        threading.Event().wait()
+    asyncio.run(stream_all(specs))
     emit("done")
 
 
@@ -299,8 +236,6 @@ def cmd_scan():
 def main(argv):
     if len(argv) >= 2 and argv[1] == "scan":
         cmd_scan()
-    elif len(argv) >= 2 and argv[1] == "devices":
-        print(json.dumps(local_devices()), flush=True)
     elif len(argv) >= 3 and argv[1] == "stream":
         cmd_stream(argv[2:])
     else:
