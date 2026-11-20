@@ -10,7 +10,7 @@
 #   ./build.sh --release [--draft] [--yes] [--dry-run]
 #                                    tag v<version>, push the tag and create the GitHub release with the dist/ files for
 #                                    that version. The working tree must be committed and pushed. It never commits.
-#   ./build.sh --delete-release [--keep-tag] [--yes] [--dry-run]
+#   ./build.sh --delete-release [<version>] [--keep-tag] [--yes] [--dry-run]
 #                                    delete the GitHub release v<version> and its tag (--keep-tag keeps the tag)
 #   ./build.sh --list-release       list the GitHub releases of this repository
 #
@@ -30,7 +30,7 @@ VERSION=$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' "$ROOT/package.json" | hea
 [ -n "$VERSION" ] || { echo "build: no version in package.json" >&2; exit 1; }
 TAG="v$VERSION"
 
-notarize=1 sign=1 plain=0 check=0 release=0 delete=0 list=0 draft=0 yes=0 dry=0 keep_tag=0
+notarize=1 sign=1 plain=0 check=0 release=0 delete=0 del_version= list=0 draft=0 yes=0 dry=0 keep_tag=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --notarize) notarize=1; shift ;;
@@ -39,7 +39,9 @@ while [ $# -gt 0 ]; do
         --plain-dmg) plain=1; shift ;;
         --check) check=1; shift ;;
         --release) release=1; shift ;;
-        --delete-release) delete=1; shift ;;
+        --delete-release)
+            delete=1; shift
+            case "${1:-}" in -*|"") ;; *) del_version="${1#v}"; shift ;; esac ;;
         --list-release) list=1; shift ;;
         --draft) draft=1; shift ;;
         --keep-tag) keep_tag=1; shift ;;
@@ -276,6 +278,8 @@ delete_release() {
     need gh "Install the GitHub CLI from https://cli.github.com, then gh auth login."
     gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login)"
     cd "$ROOT"
+    # the version to delete: the one given, else the current one
+    TAG="v${del_version:-$VERSION}"
     local exists=0 remote_tag=0 local_tag=0
     gh release view "$TAG" >/dev/null 2>&1 && exists=1
     git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1 && remote_tag=1

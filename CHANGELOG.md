@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-11-20
+
+### Fixed
+
+- `build.sh --delete-release` accepts a version (`--delete-release 0.5.9`), and deletes the current version when none is given.
+
 ## [0.6.5] - 2026-11-20
 
 ### Added
