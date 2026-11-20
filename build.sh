@@ -12,6 +12,7 @@
 #                                    that version. The working tree must be committed and pushed. It never commits.
 #   ./build.sh --delete-release [--keep-tag] [--yes] [--dry-run]
 #                                    delete the GitHub release v<version> and its tag (--keep-tag keeps the tag)
+#   ./build.sh --list-release       list the GitHub releases of this repository
 #
 # Signing uses the "Developer ID Application" identity in the keychain, or APPLE_SIGNING_IDENTITY when there is more than one.
 # Notarisation needs either an App Store Connect API key (APPLE_API_KEY, APPLE_API_ISSUER, APPLE_API_KEY_PATH) or an Apple ID
@@ -29,7 +30,7 @@ VERSION=$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' "$ROOT/package.json" | hea
 [ -n "$VERSION" ] || { echo "build: no version in package.json" >&2; exit 1; }
 TAG="v$VERSION"
 
-notarize=1 sign=1 plain=0 check=0 release=0 delete=0 draft=0 yes=0 dry=0 keep_tag=0
+notarize=1 sign=1 plain=0 check=0 release=0 delete=0 list=0 draft=0 yes=0 dry=0 keep_tag=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --notarize) notarize=1; shift ;;
@@ -39,6 +40,7 @@ while [ $# -gt 0 ]; do
         --check) check=1; shift ;;
         --release) release=1; shift ;;
         --delete-release) delete=1; shift ;;
+        --list-release) list=1; shift ;;
         --draft) draft=1; shift ;;
         --keep-tag) keep_tag=1; shift ;;
         --yes) yes=1; shift ;;
@@ -297,7 +299,16 @@ delete_release() {
     say "deleted $TAG"
 }
 
+# The GitHub releases of this repository, newest first.
+list_releases() {
+    need gh "Install the GitHub CLI from https://cli.github.com, then gh auth login."
+    gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login)"
+    cd "$ROOT"
+    gh release list --limit 100
+}
+
 if [ "$check" = 1 ]; then check_report; exit 0; fi
 if [ "$delete" = 1 ]; then delete_release; exit 0; fi
+if [ "$list" = 1 ]; then list_releases; exit 0; fi
 if [ "$release" = 1 ]; then release_it; exit 0; fi
 build_dmg

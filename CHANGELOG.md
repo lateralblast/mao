@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-20
+
+### Added
+
+- `build.sh --list-release` lists the GitHub releases of this repository.
+
 ## [0.6.4] - 2026-11-20
 
 ### Added
