@@ -1,12 +1,14 @@
-//! The system-audio tap and the Python streamer, and the pipe that joins them.
+//! The system-audio tap, the AirPlay streamer, and the Mac's output switching.
 //!
-//! The tap runs for as long as mao does and mutes the Mac's own output while it
-//! runs. Its audio goes to whichever streamer is attached, or nowhere when none is.
+//! The audio goes through a `Feed`: the tap writes into it, and it is the streamer's stdin. The
+//! feed belongs to the controller, so restarting the tap (to change how the Mac's output is
+//! handled) does not disturb the streamer. The streamer takes receivers added and removed over a
+//! Unix socket, so changing the selection does not restart it.
 
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Read, Write};
-use crate::paths::Streamer;
-use std::path::Path;
+use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -19,47 +21,37 @@ pub struct Receiver {
     pub address: String,
 }
 
-type Feed = Arc<Mutex<Option<ChildStdin>>>;
+/// Where the audio goes: the streamer's stdin, when a streamer is running.
+pub type Feed = Arc<Mutex<Option<ChildStdin>>>;
 
-/// The running tap. Its audio goes to the attached streamer, or is discarded.
+/// The socket the streamer listens on for receivers added and removed.
+pub fn control_socket() -> PathBuf {
+    std::env::temp_dir().join(format!("mao-stream-{}.sock", std::process::id()))
+}
+
+/// The running tap. It writes its audio into the feed, and is stopped on its own.
 pub struct Tap {
     child: Child,
     // Keeping the tap's stdin open keeps it running. Closing it makes the tap exit.
     stdin: Option<ChildStdin>,
-    feed: Feed,
 }
 
 impl Tap {
-    /// Sends the tap's audio to `streamer_stdin` from now on.
-    pub fn attach(&self, streamer_stdin: ChildStdin) {
-        if let Ok(mut feed) = self.feed.lock() {
-            *feed = Some(streamer_stdin);
-        }
-    }
-
-    /// Stops sending audio anywhere. Closing the streamer's stdin lets it finish.
-    pub fn detach(&self) {
-        if let Ok(mut feed) = self.feed.lock() {
-            *feed = None;
-        }
-    }
-
     pub fn stop(mut self) {
-        self.detach();
         drop(self.stdin.take());
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
 
-/// Starts the tap. With `pass`, the Mac's output plays; otherwise it is muted. `on_exit` runs if
-/// the tap stops before it is stopped.
-pub fn start_tap(tap: &Path, pass: bool, on_exit: impl FnOnce() + Send + 'static) -> Result<Tap, String> {
-    let mut child = Command::new(tap);
+/// Starts the tap. With `pass`, the Mac's output plays; otherwise it is muted. Its audio goes to
+/// `feed`. `on_exit` runs if the tap stops before it is stopped.
+pub fn start_tap(tap: &Path, pass: bool, feed: Feed, on_exit: impl FnOnce() + Send + 'static) -> Result<Tap, String> {
+    let mut command = Command::new(tap);
     if pass {
-        child.arg("--pass");
+        command.arg("--pass");
     }
-    let mut child = child
+    let mut child = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -68,16 +60,14 @@ pub fn start_tap(tap: &Path, pass: bool, on_exit: impl FnOnce() + Send + 'static
     let stdin = child.stdin.take();
     let mut out = child.stdout.take().ok_or("no tap stdout")?;
     let err = child.stderr.take().ok_or("no tap stderr")?;
-    let feed: Feed = Arc::new(Mutex::new(None));
 
-    let relay_feed = Arc::clone(&feed);
     thread::spawn(move || {
         let mut buffer = [0u8; 16384];
         loop {
             match out.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    if let Ok(mut feed) = relay_feed.lock() {
+                    if let Ok(mut feed) = feed.lock() {
                         if let Some(target) = feed.as_mut() {
                             if target.write_all(&buffer[..n]).is_err() {
                                 *feed = None;
@@ -91,31 +81,65 @@ pub fn start_tap(tap: &Path, pass: bool, on_exit: impl FnOnce() + Send + 'static
     });
     thread::spawn(move || log_lines("mao-tap", err));
 
-    Ok(Tap { child, stdin, feed })
+    Ok(Tap { child, stdin })
 }
 
-/// A running streamer for a set of targets.
+/// How to run the streamer: the frozen binary, or the Python script in the mao environment.
+pub use crate::paths::Streamer as Runner;
+
+/// A running streamer for the AirPlay receivers.
 pub struct RunningStreamer {
     child: Child,
+    feed: Feed,
+    socket: PathBuf,
+    /// The receivers it is streaming to, as the controller last set them.
+    pub receivers: Vec<Receiver>,
 }
 
 impl RunningStreamer {
+    /// Starts streaming to `receiver` as well.
+    pub fn add(&mut self, receiver: &Receiver) -> Result<(), String> {
+        self.send(&format!("add {} {}", receiver.identifier, receiver.address))?;
+        self.receivers.push(receiver.clone());
+        Ok(())
+    }
+
+    /// Stops streaming to the receiver `identifier`.
+    pub fn remove(&mut self, identifier: &str) -> Result<(), String> {
+        self.send(&format!("remove {identifier}"))?;
+        self.receivers.retain(|r| r.identifier != identifier);
+        Ok(())
+    }
+
+    fn send(&self, line: &str) -> Result<(), String> {
+        let mut socket = UnixStream::connect(&self.socket).map_err(|e| format!("could not reach the streamer: {e}"))?;
+        socket
+            .write_all(format!("{line}\n").as_bytes())
+            .map_err(|e| format!("could not reach the streamer: {e}"))
+    }
+
     pub fn stop(mut self) {
+        if let Ok(mut feed) = self.feed.lock() {
+            *feed = None;
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = std::fs::remove_file(&self.socket);
     }
 }
 
-/// Starts the streamer for AirPlay `receivers` and attaches it to the tap.
-/// `on_line` gets each JSON line the streamer prints.
+/// Starts the streamer for `receivers`, with its audio taken from `feed`. `on_line` gets each
+/// JSON line the streamer prints.
 pub fn start_streamer(
-    tap: &Tap,
-    runner: &Streamer,
+    feed: &Feed,
+    runner: &Runner,
     receivers: &[Receiver],
     on_line: impl Fn(String) + Send + 'static,
 ) -> Result<RunningStreamer, String> {
-    let mut args: Vec<String> = vec!["stream".into()];
-    args.extend(receivers.iter().map(target));
+    let socket = control_socket();
+    let _ = std::fs::remove_file(&socket);
+    let mut args: Vec<String> = vec!["stream".into(), "--control".into(), socket.to_string_lossy().into_owned()];
+    args.extend(receivers.iter().map(|r| format!("{}={}", r.identifier, r.address)));
     let mut child = runner
         .command(&args)
         .stdin(Stdio::piped())
@@ -127,19 +151,21 @@ pub fn start_streamer(
     let stdout = child.stdout.take().ok_or("no streamer stdout")?;
     let stderr = child.stderr.take().ok_or("no streamer stderr")?;
 
-    tap.attach(stdin);
+    if let Ok(mut feed) = feed.lock() {
+        *feed = Some(stdin);
+    }
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             on_line(line);
         }
     });
     thread::spawn(move || log_lines("mao-stream", stderr));
-    Ok(RunningStreamer { child })
-}
-
-/// The argument the streamer expects for an AirPlay receiver: `IDENTIFIER=ADDRESS`.
-fn target(receiver: &Receiver) -> String {
-    format!("{}={}", receiver.identifier, receiver.address)
+    Ok(RunningStreamer {
+        child,
+        feed: Arc::clone(feed),
+        socket,
+        receivers: receivers.to_vec(),
+    })
 }
 
 /// Whether an identifier names an output device on this Mac rather than an AirPlay receiver.
@@ -187,7 +213,7 @@ fn log_lines(source: &str, reader: impl Read) {
 }
 
 /// Lists the AirPlay receivers on the network. Blocks for a few seconds.
-pub fn scan(runner: &Streamer) -> Result<Vec<Receiver>, String> {
+pub fn scan(runner: &Runner) -> Result<Vec<Receiver>, String> {
     run_json(runner, "scan")
 }
 
@@ -204,7 +230,7 @@ pub fn local_devices(tap: &Path) -> Result<Vec<Receiver>, String> {
     serde_json::from_slice(&output.stdout).map_err(|e| format!("could not read the outputs: {e}"))
 }
 
-fn run_json(runner: &Streamer, command: &str) -> Result<Vec<Receiver>, String> {
+fn run_json(runner: &Runner, command: &str) -> Result<Vec<Receiver>, String> {
     let output = runner
         .command(&[command.to_string()])
         .stderr(Stdio::piped())
@@ -221,7 +247,6 @@ fn run_json(runner: &Streamer, command: &str) -> Result<Vec<Receiver>, String> {
 #[cfg(test)]
 mod hardware_tests {
     use super::*;
-    use std::path::PathBuf;
     use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
@@ -231,7 +256,7 @@ mod hardware_tests {
     #[ignore]
     fn streams_to_a_receiver() {
         let tap_path = crate::paths::tap_binary().expect("the tap binary is built");
-        let runner = Streamer::Script {
+        let runner = Runner::Script {
             python: PathBuf::from(std::env::var("MAO_PYTHON").expect("set MAO_PYTHON to the mao environment's python")),
             script: Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("python").join("mao_stream.py"),
         };
@@ -241,9 +266,10 @@ mod hardware_tests {
             address: "192.168.1.62".into(),
         };
 
-        let tap = start_tap(&tap_path, false, || {}).expect("start tap");
+        let feed: Feed = Arc::new(Mutex::new(None));
+        let tap = start_tap(&tap_path, false, Arc::clone(&feed), || {}).expect("start tap");
         let (tx, rx) = mpsc::channel();
-        let streamer = start_streamer(&tap, &runner, &[receiver], move |line| {
+        let streamer = start_streamer(&feed, &runner, &[receiver], move |line| {
             let _ = tx.send(line);
         })
         .expect("start streaming");

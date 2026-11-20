@@ -8,7 +8,7 @@
 //!   plays on this Mac.
 
 use crate::paths;
-use crate::stream::{self, Receiver, RunningStreamer, Tap};
+use crate::stream::{self, Feed, Receiver, RunningStreamer, Tap};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -67,6 +67,9 @@ struct Inner {
     local_busy: bool,
     local_dirty: bool,
     links: BTreeMap<String, Link>,
+    /// Where the captured audio goes: the streamer's stdin. Kept here, so the tap can be restarted
+    /// without disturbing the streamer.
+    feed: Feed,
     /// The capture tap. It runs while AirPlay or nothing is selected.
     tap: Option<Tap>,
     /// Whether the running tap passes the Mac's output through (true) or mutes it (false).
@@ -270,7 +273,9 @@ impl Controller {
         let generation = inner.tap_generation;
         let controller = Arc::clone(self);
         let exit_app = app.clone();
-        match stream::start_tap(&tap_binary, pass, move || controller.on_tap_exit(&exit_app, generation)) {
+        match stream::start_tap(&tap_binary, pass, Arc::clone(&inner.feed), move || {
+            controller.on_tap_exit(&exit_app, generation)
+        }) {
             Ok(tap) => {
                 inner.tap = Some(tap);
                 inner.tap_pass = pass;
@@ -280,14 +285,9 @@ impl Controller {
     }
 
     /// Brings the capture tap, the streamer and the Mac's output in line with the selection.
+    /// A running streamer is changed in place: receivers are added or removed over its control
+    /// socket, so the others keep streaming.
     fn sync_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner) {
-        if let Some(tap) = inner.tap.as_ref() {
-            tap.detach();
-        }
-        if let Some(streamer) = inner.streamer.take() {
-            streamer.stop();
-        }
-        inner.generation += 1;
         inner.error = None;
 
         let selected: Vec<String> = inner.saved.selected.iter().map(|r| r.identifier.clone()).collect();
@@ -312,23 +312,68 @@ impl Controller {
             tap.stop();
         }
 
-        for receiver in &airplay {
-            inner.links.insert(
-                receiver.identifier.clone(),
-                Link {
-                    state: "connecting".into(),
-                    message: String::new(),
-                },
-            );
-        }
-        if !airplay.is_empty() {
+        if airplay.is_empty() {
+            if let Some(streamer) = inner.streamer.take() {
+                streamer.stop();
+            }
+        } else if inner.streamer.is_some() {
+            // Change the running streamer: remove the receivers no longer selected, add the new ones.
+            let current: Vec<String> = inner
+                .streamer
+                .as_ref()
+                .map(|s| s.receivers.iter().map(|r| r.identifier.clone()).collect())
+                .unwrap_or_default();
+            let removed: Vec<String> = current
+                .iter()
+                .filter(|id| !airplay.iter().any(|r| &r.identifier == *id))
+                .cloned()
+                .collect();
+            let added: Vec<Receiver> = airplay
+                .iter()
+                .filter(|r| !current.contains(&r.identifier))
+                .cloned()
+                .collect();
+            let mut failure = None;
+            if let Some(streamer) = inner.streamer.as_mut() {
+                for identifier in &removed {
+                    if let Err(error) = streamer.remove(identifier) {
+                        failure = Some(error);
+                    }
+                    inner.links.remove(identifier);
+                }
+                for receiver in &added {
+                    if let Err(error) = streamer.add(receiver) {
+                        failure = Some(error);
+                    }
+                    inner.links.insert(
+                        receiver.identifier.clone(),
+                        Link {
+                            state: "connecting".into(),
+                            message: String::new(),
+                        },
+                    );
+                }
+            }
+            inner.error = failure;
+        } else {
+            // Nothing is streaming yet: start the streamer for all the AirPlay receivers.
             match (inner.tap.as_ref(), paths::streamer(app)) {
-                (Some(tap), Some(runner)) => {
+                (Some(_), Some(runner)) => {
+                    inner.generation += 1;
                     let generation = inner.generation;
                     let controller = Arc::clone(self);
                     let event_app = app.clone();
                     let on_line = move |line: String| controller.on_line(&event_app, generation, &line);
-                    match stream::start_streamer(tap, &runner, &airplay, on_line) {
+                    for receiver in &airplay {
+                        inner.links.insert(
+                            receiver.identifier.clone(),
+                            Link {
+                                state: "connecting".into(),
+                                message: String::new(),
+                            },
+                        );
+                    }
+                    match stream::start_streamer(&inner.feed, &runner, &airplay, on_line) {
                         Ok(streamer) => inner.streamer = Some(streamer),
                         Err(error) => inner.error = Some(error),
                     }

@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.6.0
+Version: 0.6.1
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -63,15 +63,15 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 
 ## Limitations
 
-- **One output on this Mac at a time.** The Mac can have only one system output, so mao can't play on two outputs on this Mac at once. AirPlay receivers can be combined with it.
-- Receivers start together once they have all connected (or after 10 seconds), but each has its own playback buffer, so they can still drift apart. Sync between them has not been measured.
-- Changing the selection restarts the streamer, so receivers already playing drop out for a moment.
-- If a receiver drops off the network mid-stream, it stays in the error state until you untick and retick it.
-- While nothing on this Mac is ticked, the Mac's own output is muted. Quit mao to get normal playback back.
-- mao can only restore the output it changed if it knows what that output was. If the Mac's output was already the device you first ticked, mao cannot restore a different one.
-- The streamer starts a little slower than a plain Python script, because PyInstaller unpacks it on each start.
-- `pyatv` talks to AirPlay receivers over a protocol Apple doesn't publish, so an Apple update could break it. `pyatv` and `srptools` are pinned in `python/requirements.txt`.
-- macOS only.
+- **One output on this Mac at a time.** The Mac has one system output, so mao can't play on two outputs on this Mac at once. AirPlay receivers can be combined with it.
+- **Receivers drift apart.** They start together, but each has its own playback buffer, so they can drift. Sync between them has not been measured.
+- **A dropped receiver stays in error.** If a receiver leaves the network mid-stream, untick and retick it to reconnect.
+- **Ticking or unticking an output on this Mac restarts the capture.** AirPlay receivers can drop for a moment when that happens.
+- **The Mac's output is muted unless an output on this Mac is ticked.** Quit mao to get normal playback back.
+- **The original output may not be restored.** mao restores the output it changed, but it can't tell what the output was if it was already the device you first ticked.
+- **The streamer starts a little slower** than a plain Python script, because PyInstaller unpacks it on each start.
+- **AirPlay depends on `pyatv`.** It speaks a protocol Apple doesn't publish, so an Apple update could break it. `pyatv` and `srptools` are pinned in `python/requirements.txt`.
+- **macOS only.**
 
 ## Open at login
 

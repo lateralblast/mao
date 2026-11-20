@@ -4,10 +4,11 @@
     mao_stream.py scan
         Print the AirPlay receivers on the local network as a JSON list.
 
-    mao_stream.py stream IDENTIFIER=ADDRESS [IDENTIFIER=ADDRESS ...]
+    mao_stream.py stream [--control SOCKET] [IDENTIFIER=ADDRESS ...]
         Read 48 kHz, 16-bit, stereo PCM from stdin and stream it to each AirPlay
-        receiver. Exits when stdin closes. Outputs on this Mac are played by
-        the tap helper (mao-tap play), not here.
+        receiver. The receivers can change while it runs: a line sent to the
+        control socket, "add IDENTIFIER ADDRESS" or "remove IDENTIFIER", adds or
+        removes one. Exits when stdin closes.
 
 Progress goes to stdout as one JSON object per line, for example:
     {"event": "receiver", "identifier": "...", "state": "streaming", "message": ""}
@@ -18,6 +19,7 @@ import io
 import json
 import os
 import queue
+import socket
 import struct
 import sys
 import threading
@@ -97,19 +99,23 @@ def write_all(fd, data):
 EXIT_GRACE_SECONDS = 3
 
 
-def read_stdin(source):
+def read_stdin(source, on_eof):
     while True:
         data = os.read(0, 65536)
         if not data:
             source.put(None)
+            on_eof()
             # The caller has gone. Do not wait on receivers that may never finish.
             threading.Timer(EXIT_GRACE_SECONDS, os._exit, [0]).start()
             return
         source.put(data)
 
 
-def pace(source, outputs):
-    """Feed every receiver one tick of audio every 20 ms, in real time."""
+def pace(source, current_outputs):
+    """Feed every receiver one tick of audio every 20 ms, in real time.
+
+    `current_outputs` returns the queues of the receivers at that moment, so receivers can be added
+    and removed while this runs."""
     pending = bytearray()
     deadline = time.monotonic()
     finished = False
@@ -124,7 +130,7 @@ def pace(source, outputs):
                 break
             pending += item
         chunk = take_tick(pending)
-        for out in outputs:
+        for out in current_outputs():
             try:
                 out.put_nowait(chunk)
             except queue.Full:
@@ -135,7 +141,7 @@ def pace(source, outputs):
             time.sleep(delay)
         else:
             deadline = time.monotonic()  # fell behind: resynchronise the clock
-    for out in outputs:
+    for out in current_outputs():
         out.put(None)
 
 
@@ -204,32 +210,93 @@ async def stream_receiver(loop, identifier, address, reader, ready, gate):
         atv.close()
 
 
-async def stream_all(specs):
-    loop = asyncio.get_running_loop()
-    gate = StartGate(len(specs))
-    asyncio.create_task(open_after(gate, START_TIMEOUT))
-    await asyncio.gather(
-        *(stream_receiver(loop, ident, addr, reader, ready, gate) for ident, addr, reader, ready in specs)
-    )
+class Hub:
+    """The receivers that are streaming now. Runs in the streamer's event loop thread."""
 
+    def __init__(self, loop):
+        self.loop = loop
+        self.lock = threading.Lock()
+        self.outputs = {}  # identifier -> the queue the pacer fills for it
 
-def cmd_stream(args):
-    source = queue.Queue()
-    threading.Thread(target=read_stdin, args=(source,), daemon=True).start()
+    def current_outputs(self):
+        with self.lock:
+            return list(self.outputs.values())
 
-    outputs, specs = [], []
-    for arg in args:
-        identifier, _, address = arg.partition("=")
+    def add(self, identifier, address, gate=None):
+        with self.lock:
+            if identifier in self.outputs:
+                return
         read_fd, write_fd = os.pipe()
         reader = io.BufferedReader(io.FileIO(read_fd, "rb"))
         out = queue.Queue(maxsize=RECEIVER_QUEUE_TICKS)
         ready = threading.Event()
         threading.Thread(target=write_receiver, args=(out, write_fd, ready), daemon=True).start()
-        outputs.append(out)
-        specs.append((identifier, address, reader, ready))
+        with self.lock:
+            self.outputs[identifier] = out
+        # A receiver added later does not wait for the others: the start gate is already open.
+        gate = gate or StartGate(0)
+        asyncio.run_coroutine_threadsafe(
+            stream_receiver(self.loop, identifier, address, reader, ready, gate), self.loop
+        )
 
-    threading.Thread(target=pace, args=(source, outputs), daemon=True).start()
-    asyncio.run(stream_all(specs))
+    def remove(self, identifier):
+        with self.lock:
+            out = self.outputs.pop(identifier, None)
+        if out is not None:
+            # Ending the queue ends the writer, which closes the pipe, which ends the stream.
+            threading.Thread(target=out.put, args=(None,), daemon=True).start()
+
+
+def serve_control(path, hub):
+    """Accept "add IDENTIFIER ADDRESS" and "remove IDENTIFIER" lines on a Unix socket."""
+    if os.path.exists(path):
+        os.unlink(path)
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(path)
+    server.listen(8)
+
+    def handle(conn):
+        with conn, conn.makefile("r") as lines:
+            for line in lines:
+                parts = line.split()
+                if len(parts) == 3 and parts[0] == "add":
+                    hub.add(parts[1], parts[2])
+                elif len(parts) == 2 and parts[0] == "remove":
+                    hub.remove(parts[1])
+
+    def accept():
+        while True:
+            conn, _ = server.accept()
+            threading.Thread(target=handle, args=(conn,), daemon=True).start()
+
+    threading.Thread(target=accept, daemon=True).start()
+
+
+def cmd_stream(args):
+    control = None
+    if len(args) >= 2 and args[0] == "--control":
+        control, args = args[1], args[2:]
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    eof = asyncio.Event()
+    source = queue.Queue()
+    hub = Hub(loop)
+    threading.Thread(
+        target=read_stdin, args=(source, lambda: loop.call_soon_threadsafe(eof.set)), daemon=True
+    ).start()
+    threading.Thread(target=pace, args=(source, hub.current_outputs), daemon=True).start()
+    if control:
+        serve_control(control, hub)
+
+    # The receivers given at launch start together, as before.
+    targets = [arg.partition("=") for arg in args]
+    gate = StartGate(len(targets))
+    loop.create_task(open_after(gate, START_TIMEOUT))
+    for identifier, _, address in targets:
+        hub.add(identifier, address, gate)
+
+    loop.run_until_complete(eof.wait())
     emit("done")
 
 

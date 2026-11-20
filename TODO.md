@@ -5,7 +5,6 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 ## Open
 
 - [ ] Measure sync between receivers. Each has its own buffer, so they can drift apart. Do this with the receivers in earshot of one microphone, or both in one room.
-- [ ] Add or remove a receiver without restarting the stream. Today every change restarts all receivers, which drops them for a moment.
 - [ ] Reconnect a receiver that drops off the network mid-stream. Today it stays in the error state until it is unticked and reticked.
 - [ ] Test the popover by clicking through it on a real Mac. So far only the Rust and Python paths have run, not the UI.
 - [ ] Bundle a Python runtime with the app (for example PyInstaller), so it runs without `scripts/setup-python.sh`.
@@ -15,6 +14,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## Done
 
+- [x] Add or remove a receiver without restarting the stream (0.6.1): the streamer takes receivers over a control socket.
 - [x] Discover AirPlay receivers by name with `pyatv` (Bonjour), and skip this Mac's own addresses.
 - [x] Capture system audio with a Core Audio process tap (`tap/mao-tap.swift`), which leaves the local output alone.
 - [x] Stream to a HomePod with `pyatv` over AirPlay. Confirmed with Kitchen, including a click track through the full pipeline.

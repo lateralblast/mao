@@ -71,7 +71,7 @@ class PaceTests(unittest.TestCase):
         source.put(b"\x00" * m.TICK_BYTES)
         source.put(None)
         outputs = [queue.Queue(), queue.Queue()]
-        m.pace(source, outputs)
+        m.pace(source, lambda: outputs)
         for out in outputs:
             items = []
             while not out.empty():
