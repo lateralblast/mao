@@ -4,7 +4,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## Open
 
-- [ ] Measure sync between receivers. Each has its own buffer, so they can drift apart. Do this with the receivers in earshot of one microphone, or both in one room.
+- [ ] Measure sync between receivers. Each has its own buffer, so they can drift apart. Plan: put Orange and White HomePods in one room, tick both, play a click track, and record about 10 s from the Mac microphone. Each click appears once per receiver, so the gap between paired clicks is the drift. Needs both receivers in one room and permission to use the microphone.
 - [ ] Reconnect a receiver that drops off the network mid-stream. Today it stays in the error state until it is unticked and reticked.
 - [ ] Test the popover by clicking through it on a real Mac. So far only the Rust and Python paths have run, not the UI.
 - [ ] Bundle a Python runtime with the app (for example PyInstaller), so it runs without `scripts/setup-python.sh`.

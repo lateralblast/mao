@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.6.1
+Version: 0.6.4
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -45,12 +45,13 @@ The first time mao captures audio, macOS asks for permission to capture system a
   <em>The popover. The device names are placeholders.</em>
 </p>
 
-Click the mao icon in the menu bar. The popover lists the AirPlay receivers on your network and the outputs on this Mac (marked *this Mac*). Tick a receiver to send audio to it, and untick it to stop. Your selection is saved and resumed on the next launch.
+Click the mao icon in the menu bar. The popover lists the AirPlay receivers on your network and the outputs on this Mac (marked *this Mac*). Tick a receiver to send audio to it, and untick it to stop. AirPlay receivers are not remembered between launches: tick them once they have been found. Outputs on this Mac are remembered.
 
 - **AirPlay receivers** can be ticked in any number, together with one output on this Mac.
 - **One output on this Mac** can be ticked at a time. Ticking another one unticks the first.
 - Devices appear and disappear as you plug them in or unplug them. AirPlay receivers are searched for each time the popover opens.
 - Each ticked receiver shows its state: connecting, streaming, ended or error. Hover over an error for the reason.
+- At launch, the output on this Mac that the Mac is currently using is ticked, so the popover matches what the Mac plays through.
 - Quit mao with the button at the bottom of the popover.
 
 ## How it works

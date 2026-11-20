@@ -90,10 +90,11 @@ pub struct Controller {
 
 impl Controller {
     pub fn load(path: PathBuf) -> Self {
-        let saved = fs::read_to_string(&path)
+        let saved: Saved = fs::read_to_string(&path)
             .ok()
             .and_then(|text| serde_json::from_str(&text).ok())
             .unwrap_or_default();
+        let saved = persistable(&saved);
         Controller {
             path,
             inner: Mutex::new(Inner {
@@ -111,7 +112,7 @@ impl Controller {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        let text = serde_json::to_string_pretty(saved).map_err(|e| e.to_string())?;
+        let text = serde_json::to_string_pretty(&persistable(saved)).map_err(|e| e.to_string())?;
         fs::write(&self.path, text).map_err(|e| e.to_string())
     }
 
@@ -120,9 +121,26 @@ impl Controller {
         build_status(&inner)
     }
 
-    /// Starts the saved selection, at launch.
+    /// Starts the saved selection, at launch. An output on this Mac that is the Mac's current
+    /// system output is ticked, in place of any other output on this Mac, so the selection matches
+    /// what the Mac is playing through.
     pub fn start_saved(self: &Arc<Self>, app: &AppHandle) {
         let mut inner = self.lock();
+        if let Some(tap) = paths::tap_binary() {
+            if let (Ok(current), Ok(local)) = (stream::system_output(&tap), stream::local_devices(&tap)) {
+                if let Some(device) = local
+                    .iter()
+                    .find(|d| stream::local_uid(&d.identifier) == Some(current.as_str()))
+                    .cloned()
+                {
+                    inner.saved.selected.retain(|r| !stream::is_local(&r.identifier));
+                    inner.saved.selected.push(device.clone());
+                    self.set_local_locked(app, &mut inner, local);
+                    let saved = inner.saved.clone();
+                    let _ = self.save(&saved);
+                }
+            }
+        }
         self.sync_locked(app, &mut inner);
         drop(inner);
         let _ = app.emit(STATUS_EVENT, self.status());
@@ -577,6 +595,15 @@ pub fn remap_local(saved: &mut [Receiver], available: &[Receiver]) -> bool {
     changed
 }
 
+/// What is kept between launches: the outputs on this Mac only. AirPlay receivers are not
+/// remembered, because they are only known once discovery has finished, and ticking one before
+/// then fails. At launch the Mac's current output decides the local selection.
+fn persistable(saved: &Saved) -> Saved {
+    let mut kept = saved.clone();
+    kept.selected.retain(|r| stream::is_local(&r.identifier));
+    kept
+}
+
 /// One entry per receiver. Discovery can report the same device at several addresses.
 fn dedupe(found: Vec<Receiver>) -> Vec<Receiver> {
     let mut unique: Vec<Receiver> = Vec::new();
@@ -668,6 +695,21 @@ mod tests {
         let available = vec![receiver("local:Other", "Other", "")];
         assert!(!remap_local(&mut saved, &available));
         assert_eq!(saved[1].identifier, "local:Gone");
+    }
+
+    #[test]
+    fn only_outputs_on_this_mac_are_kept_between_launches() {
+        let saved = Saved {
+            selected: vec![
+                receiver("B2:5B", "Kitchen", "10.0.0.1"),
+                receiver("local:BuiltInHeadphoneOutputDevice", "External Headphones", ""),
+            ],
+            original_output: Some("BuiltInSpeakerDevice".into()),
+        };
+        let kept = persistable(&saved);
+        assert_eq!(kept.selected.len(), 1);
+        assert_eq!(kept.selected[0].name, "External Headphones");
+        assert_eq!(kept.original_output.as_deref(), Some("BuiltInSpeakerDevice"));
     }
 
     #[test]

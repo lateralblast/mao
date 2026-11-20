@@ -16,12 +16,20 @@ const STATE_LABELS = {
 let current = null;
 let busy = false;
 
+// A small spinning indicator, so a search in progress is visibly working.
+function spinner() {
+  const element = document.createElement("span");
+  element.className = "spinner";
+  element.setAttribute("aria-hidden", "true");
+  return element;
+}
+
 function render(status) {
   current = status;
 
   const count = status.receivers.filter((r) => r.selected).length;
   if (status.scanning) {
-    statusLine.textContent = "Looking for AirPlay receivers…";
+    statusLine.replaceChildren(spinner(), document.createTextNode("Looking for AirPlay receivers…"));
   } else if (count === 0) {
     statusLine.textContent = "Muted: nothing ticked, so no audio plays";
   } else {

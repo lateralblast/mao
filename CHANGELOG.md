@@ -5,6 +5,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-20
+
+### Added
+
+- A spinning indicator next to "Looking for AirPlay receivers…", so a search that is still running is visible.
+
+## [0.6.3] - 2026-11-20
+
+### Changed
+
+- AirPlay receivers are no longer remembered between launches. Ticking one before discovery had finished gave an error, so they must be ticked once found. Outputs on this Mac are still remembered.
+
+## [0.6.2] - 2026-11-20
+
+### Changed
+
+- At launch, the popover ticks the output on this Mac that the Mac is currently using, in place of the saved one, so the selection matches what the Mac plays through.
+
 ## [0.6.1] - 2026-11-20
 
 ### Changed
