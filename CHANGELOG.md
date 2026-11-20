@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-20
+
+### Changed
+
+- AirPlay receivers start together: the streamer waits until every selected receiver has connected, or for 10 seconds at most, before it starts any of them.
+
 ## [0.5.9] - 2026-11-20
 
 ### Fixed

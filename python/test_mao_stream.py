@@ -42,6 +42,29 @@ class DiscoveryTests(unittest.TestCase):
         self.assertTrue(m.local_addresses())
 
 
+class StartGateTests(unittest.TestCase):
+    def test_opens_only_after_every_receiver_has_arrived(self):
+        import asyncio
+
+        async def run():
+            gate = m.StartGate(3)
+            gate.arrived()
+            gate.arrived()
+            self.assertFalse(gate.open.is_set())
+            gate.arrived()
+            self.assertTrue(gate.open.is_set())
+
+        asyncio.run(run())
+
+    def test_no_receivers_means_open(self):
+        import asyncio
+
+        async def run():
+            self.assertTrue(m.StartGate(0).open.is_set())
+
+        asyncio.run(run())
+
+
 class PaceTests(unittest.TestCase):
     def test_pace_ends_every_output_with_none(self):
         source = queue.Queue()

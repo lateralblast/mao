@@ -35,6 +35,8 @@ MAX_PENDING_BYTES = RATE * BYTES_PER_FRAME // 4  # keep at most 250 ms of backlo
 RECEIVER_QUEUE_TICKS = 250  # about 5 s of audio per receiver before dropping
 SCAN_TIMEOUT = 6
 HOST_TIMEOUT = 3
+# Longest wait for every receiver to connect before they all start together.
+START_TIMEOUT = 10
 SILENCE = bytes(TICK_BYTES)
 
 _print_lock = threading.Lock()
@@ -156,7 +158,27 @@ def write_receiver(out, fd, ready):
         os.close(fd)
 
 
-async def stream_receiver(loop, identifier, address, reader, ready):
+class StartGate:
+    """Opens once every receiver has connected or failed, so they all start together."""
+
+    def __init__(self, count):
+        self.open = asyncio.Event()
+        self.waiting = count
+        if count == 0:
+            self.open.set()
+
+    def arrived(self):
+        self.waiting -= 1
+        if self.waiting <= 0:
+            self.open.set()
+
+
+async def open_after(gate, seconds):
+    await asyncio.sleep(seconds)
+    gate.open.set()
+
+
+async def stream_receiver(loop, identifier, address, reader, ready, gate):
     emit("receiver", identifier=identifier, state="connecting", message="")
     try:
         found = await pyatv.scan(loop, timeout=HOST_TIMEOUT, hosts=[address])
@@ -165,9 +187,12 @@ async def stream_receiver(loop, identifier, address, reader, ready):
             raise RuntimeError(f"no receiver with identifier {identifier} at {address}")
         atv = await pyatv.connect(conf, loop, protocol=Protocol.AirPlay)
     except Exception as error:
+        gate.arrived()
         emit("receiver", identifier=identifier, state="error", message=describe(error))
         return
 
+    gate.arrived()
+    await gate.open.wait()
     ready.set()
     emit("receiver", identifier=identifier, state="streaming", message="")
     try:
@@ -181,8 +206,10 @@ async def stream_receiver(loop, identifier, address, reader, ready):
 
 async def stream_all(specs):
     loop = asyncio.get_running_loop()
+    gate = StartGate(len(specs))
+    asyncio.create_task(open_after(gate, START_TIMEOUT))
     await asyncio.gather(
-        *(stream_receiver(loop, ident, addr, reader, ready) for ident, addr, reader, ready in specs)
+        *(stream_receiver(loop, ident, addr, reader, ready, gate) for ident, addr, reader, ready in specs)
     )
 
 
