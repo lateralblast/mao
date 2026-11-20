@@ -9,7 +9,8 @@
 #   ./build.sh --check               report the signing identity, notary credentials and tools, and build nothing
 #   ./build.sh --release [--draft] [--yes] [--dry-run]
 #                                    tag v<version>, push the tag and create the GitHub release with the dist/ files for
-#                                    that version. The working tree must be committed and pushed. It never commits.
+#                                    that version. If there is no disk image for the version yet, it is built first (as
+#                                    ./build.sh does). The working tree must be committed and pushed. It never commits.
 #   ./build.sh --delete-release [<version>] [--keep-tag] [--yes] [--dry-run]
 #                                    delete the GitHub release v<version> and its tag (--keep-tag keeps the tag)
 #   ./build.sh --list-release       list the GitHub releases of this repository
@@ -226,7 +227,20 @@ release_it() {
     shopt -s nullglob
     local assets=("$DIST"/mao_"$VERSION"_*.dmg)
     shopt -u nullglob
-    [ "${#assets[@]}" -gt 0 ] || die "no disk image for $VERSION in dist/: build it first with ./build.sh"
+    if [ "${#assets[@]}" -eq 0 ]; then
+        # No disk image for this version yet: build it the same way ./build.sh does, then release it.
+        if [ "$dry" = 1 ]; then
+            echo "build: no disk image for $VERSION in dist/: [dry-run] would build it first"
+            echo "dry run: nothing was built, tagged, pushed or published"
+            return
+        fi
+        echo "build: no disk image for $VERSION in dist/: building it first"
+        build_dmg
+        shopt -s nullglob
+        assets=("$DIST"/mao_"$VERSION"_*.dmg)
+        shopt -u nullglob
+        [ "${#assets[@]}" -gt 0 ] || die "the build did not produce a disk image for $VERSION"
+    fi
 
     git fetch -q origin 2>/dev/null || true
     [ -z "$(git status --porcelain)" ] || die "uncommitted changes: commit them first (this script never commits)"
