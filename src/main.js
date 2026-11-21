@@ -15,6 +15,9 @@ const STATE_LABELS = {
 
 let current = null;
 let busy = false;
+// While a volume slider is being dragged, the list is not rebuilt, so the slider is not lost.
+let dragging = false;
+let pendingStatus = null;
 
 // A small spinning indicator, so a search in progress is visibly working.
 function spinner() {
@@ -25,6 +28,10 @@ function spinner() {
 }
 
 function render(status) {
+  if (dragging) {
+    pendingStatus = status;
+    return;
+  }
   current = status;
 
   const count = status.receivers.filter((r) => r.selected).length;
@@ -85,7 +92,99 @@ function renderRow(receiver) {
   }
 
   item.append(label);
+  if (receiver.selected && receiver.state === "streaming" && typeof receiver.volume === "number") {
+    item.append(volumeRow(receiver));
+  }
   return item;
+}
+
+// Speaker icon for the mute button: a speaker with sound waves, or with a cross when muted.
+function speakerIcon(muted) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const body = document.createElementNS(ns, "path");
+  body.setAttribute("d", "M2 6h2.5L8 3.2v9.6L4.5 10H2z");
+  body.setAttribute("fill", "currentColor");
+  svg.append(body);
+  const shape = document.createElementNS(ns, "path");
+  shape.setAttribute("fill", "none");
+  shape.setAttribute("stroke", "currentColor");
+  shape.setAttribute("stroke-width", "1.4");
+  shape.setAttribute("stroke-linecap", "round");
+  if (muted) {
+    shape.setAttribute("d", "M10.5 6l3.5 4M14 6l-3.5 4");
+  } else {
+    shape.setAttribute("d", "M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6 6 0 0 1 0 9");
+  }
+  svg.append(shape);
+  return svg;
+}
+
+function volumeRow(receiver) {
+  const row = document.createElement("div");
+  row.className = "volume";
+
+  const mute = document.createElement("button");
+  mute.type = "button";
+  mute.className = "mute";
+  mute.title = receiver.muted ? "Unmute" : "Mute";
+  mute.setAttribute("aria-label", `${receiver.muted ? "Unmute" : "Mute"} ${receiver.name}`);
+  mute.setAttribute("aria-pressed", String(receiver.muted));
+  mute.append(speakerIcon(receiver.muted));
+  mute.addEventListener("click", async () => {
+    try {
+      await invoke("set_mute", { identifier: receiver.identifier, muted: !receiver.muted });
+    } catch (err) {
+      errorLine.hidden = false;
+      errorLine.textContent = String(err);
+    }
+  });
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = "100";
+  slider.step = "1";
+  slider.value = String(Math.round(receiver.volume));
+  slider.setAttribute("aria-label", `Volume for ${receiver.name}`);
+  // While muted, the slider keeps its place but cannot be moved; unmuting restores the level.
+  slider.disabled = receiver.muted;
+
+  const level = document.createElement("span");
+  level.className = "level";
+  level.textContent = `${Math.round(receiver.volume)}%`;
+
+  slider.addEventListener("pointerdown", () => {
+    dragging = true;
+  });
+  slider.addEventListener("input", () => {
+    level.textContent = `${slider.value}%`;
+  });
+  slider.addEventListener("change", async () => {
+    try {
+      await invoke("set_volume", { identifier: receiver.identifier, level: Number(slider.value) });
+    } catch (err) {
+      errorLine.hidden = false;
+      errorLine.textContent = String(err);
+    }
+    endDrag();
+  });
+  // A press without a change (no movement) still has to end the drag.
+  slider.addEventListener("pointerup", () => setTimeout(endDrag, 300));
+
+  row.append(mute, slider, level);
+  return row;
+}
+
+function endDrag() {
+  dragging = false;
+  if (pendingStatus) {
+    const status = pendingStatus;
+    pendingStatus = null;
+    render(status);
+  }
 }
 
 async function toggle(identifier, on) {

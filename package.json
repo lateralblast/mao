@@ -1,6 +1,6 @@
 {
   "name": "mao",
-  "version": "0.6.7",
+  "version": "0.7.1",
   "private": true,
   "description": "Multi AirPlay Output: send system audio to several AirPlay receivers at once",
   "scripts": {
@@ -11,5 +11,6 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.6"
-  }
+  },
+  "license": "Apache-2.0"
 }

@@ -35,7 +35,7 @@ pub struct Link {
     pub message: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ReceiverStatus {
     pub identifier: String,
@@ -47,9 +47,13 @@ pub struct ReceiverStatus {
     /// idle, connecting, streaming, ended, error or unavailable.
     pub state: String,
     pub message: String,
+    /// The volume of a streaming AirPlay receiver, 0 to 100, once it has been reported.
+    pub volume: Option<f64>,
+    /// Whether the receiver is muted by mao.
+    pub muted: bool,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub receivers: Vec<ReceiverStatus>,
@@ -67,6 +71,10 @@ struct Inner {
     local_busy: bool,
     local_dirty: bool,
     links: BTreeMap<String, Link>,
+    /// The volume each streaming AirPlay receiver reports, 0 to 100.
+    volumes: BTreeMap<String, f64>,
+    /// Receivers muted by mao, with the volume to restore when they are unmuted.
+    muted: BTreeMap<String, f64>,
     /// Where the captured audio goes: the streamer's stdin. Kept here, so the tap can be restarted
     /// without disturbing the streamer.
     feed: Feed,
@@ -162,6 +170,35 @@ impl Controller {
         drop(inner);
         let _ = app.emit(STATUS_EVENT, status.clone());
         Ok(status)
+    }
+
+    /// Sets the volume of a streaming AirPlay receiver, 0 to 100.
+    pub fn set_volume(self: &Arc<Self>, app: &AppHandle, identifier: &str, level: f64) -> Result<(), String> {
+        let inner = self.lock();
+        let streamer = inner.streamer.as_ref().ok_or("that receiver is not streaming")?;
+        streamer.set_volume(identifier, level.clamp(0.0, 100.0))?;
+        drop(inner);
+        let _ = app.emit(STATUS_EVENT, self.status());
+        Ok(())
+    }
+
+    /// Mutes or unmutes a streaming AirPlay receiver. Muting keeps its volume to restore later.
+    pub fn set_mute(self: &Arc<Self>, app: &AppHandle, identifier: &str, muted: bool) -> Result<(), String> {
+        let mut guard = self.lock();
+        let inner: &mut Inner = &mut guard;
+        let streamer = inner.streamer.as_ref().ok_or("that receiver is not streaming")?;
+        if muted {
+            let restore = inner.volumes.get(identifier).copied().filter(|v| *v > 0.0).unwrap_or(50.0);
+            inner.muted.entry(identifier.to_string()).or_insert(restore);
+            streamer.set_volume(identifier, 0.0)?;
+        } else {
+            let level = inner.muted.remove(identifier).unwrap_or(50.0);
+            streamer.set_volume(identifier, level)?;
+        }
+        let status = build_status(inner);
+        drop(guard);
+        let _ = app.emit(STATUS_EVENT, status);
+        Ok(())
     }
 
     /// Looks for receivers on the network in the background.
@@ -372,6 +409,10 @@ impl Controller {
                     );
                 }
             }
+            for identifier in &removed {
+                inner.volumes.remove(identifier);
+                inner.muted.remove(identifier);
+            }
             inner.error = failure;
         } else {
             // Nothing is streaming yet: start the streamer for all the AirPlay receivers.
@@ -391,6 +432,7 @@ impl Controller {
                             },
                         );
                     }
+                    inner.volumes.clear();
                     match stream::start_streamer(&inner.feed, &runner, &airplay, on_line) {
                         Ok(streamer) => inner.streamer = Some(streamer),
                         Err(error) => inner.error = Some(error),
@@ -445,6 +487,27 @@ impl Controller {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
             return;
         };
+        if value["event"] == "volume" {
+            let (Some(identifier), Some(level)) = (value["identifier"].as_str(), value["level"].as_f64()) else {
+                return;
+            };
+            let status = {
+                let mut inner = self.lock();
+                if inner.generation != generation {
+                    return;
+                }
+                inner.volumes.insert(identifier.to_string(), level);
+                // A muted receiver may report its own volume again (after a reconnect): mute it again.
+                if level > 0.0 && inner.muted.contains_key(identifier) {
+                    if let Some(streamer) = inner.streamer.as_ref() {
+                        let _ = streamer.set_volume(identifier, 0.0);
+                    }
+                }
+                build_status(&inner)
+            };
+            let _ = app.emit(STATUS_EVENT, status);
+            return;
+        }
         if value["event"] != "receiver" {
             return;
         }
@@ -528,6 +591,8 @@ fn build_status(inner: &Inner) -> Status {
                 kind: kind_of(&r.identifier),
                 state,
                 message,
+                volume: inner.volumes.get(&r.identifier).copied(),
+                muted: inner.muted.contains_key(&r.identifier),
             }
         })
         .collect();
@@ -545,6 +610,8 @@ fn build_status(inner: &Inner) -> Status {
             kind: kind_of(&saved.identifier),
             state: "unavailable".into(),
             message: "not found on the network".into(),
+            volume: None,
+            muted: inner.muted.contains_key(&saved.identifier),
         });
     }
     receivers.sort_by_key(|r| r.name.to_lowercase());

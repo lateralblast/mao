@@ -310,3 +310,50 @@ footer {
     animation-duration: 2.4s;
   }
 }
+
+.receivers .volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px 34px;
+}
+
+.receivers .volume input[type="range"] {
+  flex: 1;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.receivers .volume .level {
+  width: 36px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.receivers .volume .mute {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: default;
+}
+
+.receivers .volume .mute:hover {
+  color: var(--fg);
+}
+
+.receivers .volume .mute svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  margin: 0 auto;
+}
+
+.receivers .volume input[type="range"]:disabled {
+  opacity: 0.4;
+}

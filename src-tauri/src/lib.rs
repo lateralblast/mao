@@ -116,6 +116,16 @@ fn quit_app(app: AppHandle) {
 }
 
 #[tauri::command]
+fn set_volume(identifier: String, level: f64, app: AppHandle, controller: State<Arc<Controller>>) -> Result<(), String> {
+    controller.set_volume(&app, &identifier, level)
+}
+
+#[tauri::command]
+fn set_mute(identifier: String, muted: bool, app: AppHandle, controller: State<Arc<Controller>>) -> Result<(), String> {
+    controller.set_mute(&app, &identifier, muted)
+}
+
+#[tauri::command]
 fn refresh_receivers(app: AppHandle, controller: State<Arc<Controller>>) {
     controller.refresh_scan(&app);
 }
@@ -211,7 +221,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {
@@ -270,6 +280,21 @@ mod version_tests {
     fn read_json(path: &str) -> serde_json::Value {
         let text = fs::read_to_string(repo_root().join(path)).expect("read file");
         serde_json::from_str(&text).expect("parse JSON")
+    }
+
+    #[test]
+    fn version_components_do_not_exceed_nine() {
+        // The base conventions: MAJOR.MINOR.PATCH, and no component may exceed 9 (a patch past 9
+        // rolls into the minor, and a minor past 9 into the major).
+        let version = env!("CARGO_PKG_VERSION");
+        let parts: Vec<u32> = version
+            .split('.')
+            .map(|part| part.parse().unwrap_or_else(|_| panic!("version part {part:?} is not a number")))
+            .collect();
+        assert_eq!(parts.len(), 3, "version {version} should be MAJOR.MINOR.PATCH");
+        for part in &parts {
+            assert!(*part <= 9, "version {version} has a component above 9");
+        }
     }
 
     #[test]

@@ -2,9 +2,24 @@
 
 # mao
 
-Version: 0.6.7
+Version: 0.7.1
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
+
+## Features
+
+- **Several AirPlay receivers at once.** Tick any number of HomePods or other AirPlay receivers, and they play the same audio.
+- **One output on this Mac.** Tick the built-in speakers, headphones or another output, and macOS plays through it directly.
+- **Silent unless ticked.** Audio plays only where you send it. With nothing ticked, the Mac is muted.
+- **Start together.** Receivers begin playing once they have all connected, or after 10 seconds at most.
+- **Add and remove without interruption.** Ticking or unticking a receiver doesn't restart the others.
+- **Per-receiver volume and mute.** Each streaming receiver has a volume slider and a mute button. Muting keeps its level for when you unmute.
+- **Reconnects by itself.** A ticked receiver that drops off the network is retried every 10 seconds.
+- **Remembers your outputs.** The outputs on this Mac you choose are saved. AirPlay receivers are ticked again each launch, once they have been found.
+- **Follows the Mac's output at launch.** The output the Mac is using is ticked when mao starts.
+- **Finds devices as they change.** Receivers and outputs appear and disappear as you plug in or switch them off, without restarting mao.
+- **Menu bar app.** It has no Dock icon, and it can open at login from the info view.
+- **Self-contained.** The streamer is bundled, so the app needs no Python installed.
 
 ## Quick start
 
@@ -29,6 +44,7 @@ The first time mao captures audio, macOS asks for permission to capture system a
 
 ## Contents
 
+- [Features](#features)
 - [Using mao](#using-mao)
 - [How it works](#how-it-works)
 - [Limitations](#limitations)
@@ -51,6 +67,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 - **One output on this Mac** can be ticked at a time. Ticking another one unticks the first.
 - Devices appear and disappear as you plug them in or unplug them. AirPlay receivers are searched for each time the popover opens.
 - Each ticked receiver shows its state: connecting, streaming, ended or error. Hover over an error for the reason.
+- A streaming AirPlay receiver has a volume slider under its name, with a mute button at its left. Muting sets that receiver's own volume to zero, and unmuting restores the level it had. It does not change the Mac's volume.
 - At launch, the output on this Mac that the Mac is currently using is ticked, so the popover matches what the Mac plays through.
 - Quit mao with the button at the bottom of the popover.
 
@@ -66,7 +83,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 
 - **One output on this Mac at a time.** The Mac has one system output, so mao can't play on two outputs on this Mac at once. AirPlay receivers can be combined with it.
 - **Receivers drift apart.** They start together, but each has its own playback buffer, so they can drift. Sync between them has not been measured.
-- **A dropped receiver stays in error.** If a receiver leaves the network mid-stream, untick and retick it to reconnect.
+- **A dropped receiver is retried every 10 seconds** while it is ticked. If it stays away, it shows an error until it returns or you untick it.
 - **Ticking or unticking an output on this Mac restarts the capture.** AirPlay receivers can drop for a moment when that happens.
 - **The Mac's output is muted unless an output on this Mac is ticked.** Quit mao to get normal playback back.
 - **The original output may not be restored.** mao restores the output it changed, but it can't tell what the output was if it was already the device you first ticked.
@@ -99,3 +116,7 @@ https://ko-fi.com/richardatlateralblast
 ## Attribution
 
 Hamster icons created by [MEDZ - Flaticon](https://www.flaticon.com/free-icons/hamster)
+
+## Licence
+
+Copyright 2026 Richard Spindler. Licensed under the Apache License, Version 2.0. See [LICENSE.md](LICENSE.md).

@@ -104,6 +104,11 @@ impl RunningStreamer {
         Ok(())
     }
 
+    /// Sets the volume (0 to 100) of the streaming receiver `identifier`.
+    pub fn set_volume(&self, identifier: &str, level: f64) -> Result<(), String> {
+        self.send(&format!("volume {identifier} {level:.0}"))
+    }
+
     /// Stops streaming to the receiver `identifier`.
     pub fn remove(&mut self, identifier: &str) -> Result<(), String> {
         self.send(&format!("remove {identifier}"))?;

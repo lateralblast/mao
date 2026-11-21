@@ -7,8 +7,9 @@
     mao_stream.py stream [--control SOCKET] [IDENTIFIER=ADDRESS ...]
         Read 48 kHz, 16-bit, stereo PCM from stdin and stream it to each AirPlay
         receiver. The receivers can change while it runs: a line sent to the
-        control socket, "add IDENTIFIER ADDRESS" or "remove IDENTIFIER", adds or
-        removes one. Exits when stdin closes.
+        control socket, "add IDENTIFIER ADDRESS", "remove IDENTIFIER" or
+        "volume IDENTIFIER LEVEL" (0-100), adds, removes or sets the volume of one.
+        Exits when stdin closes.
 
 Progress goes to stdout as one JSON object per line, for example:
     {"event": "receiver", "identifier": "...", "state": "streaming", "message": ""}
@@ -39,6 +40,8 @@ SCAN_TIMEOUT = 6
 HOST_TIMEOUT = 3
 # Longest wait for every receiver to connect before they all start together.
 START_TIMEOUT = 10
+# How long to wait before trying a receiver again after it drops or fails to connect.
+RECONNECT_SECONDS = 10
 SILENCE = bytes(TICK_BYTES)
 
 _print_lock = threading.Lock()
@@ -184,7 +187,19 @@ async def open_after(gate, seconds):
     gate.open.set()
 
 
-async def stream_receiver(loop, identifier, address, reader, ready, gate):
+async def reconnect(hub, identifier, address):
+    """If the receiver is still ticked, end its stream and try again after a pause."""
+    if hub is None or not hub.wants(identifier):
+        return
+    emit("receiver", identifier=identifier, state="error",
+         message=f"lost; trying again in {RECONNECT_SECONDS} s")
+    hub.drop_stream(identifier)
+    await asyncio.sleep(RECONNECT_SECONDS)
+    if hub.wants(identifier):
+        hub.add(identifier, address)
+
+
+async def stream_receiver(loop, identifier, address, reader, ready, gate, hub=None):
     emit("receiver", identifier=identifier, state="connecting", message="")
     try:
         found = await pyatv.scan(loop, timeout=HOST_TIMEOUT, hosts=[address])
@@ -195,19 +210,29 @@ async def stream_receiver(loop, identifier, address, reader, ready, gate):
     except Exception as error:
         gate.arrived()
         emit("receiver", identifier=identifier, state="error", message=describe(error))
+        await reconnect(hub, identifier, address)
         return
 
     gate.arrived()
     await gate.open.wait()
     ready.set()
+    if hub is not None:
+        hub.clients[identifier] = atv
     emit("receiver", identifier=identifier, state="streaming", message="")
+    try:
+        emit("volume", identifier=identifier, level=atv.audio.volume)
+    except Exception:
+        pass  # this receiver does not report its volume
     try:
         await atv.stream.stream_file(reader)
         emit("receiver", identifier=identifier, state="ended", message="")
     except Exception as error:
         emit("receiver", identifier=identifier, state="error", message=describe(error))
     finally:
+        if hub is not None:
+            hub.clients.pop(identifier, None)
         atv.close()
+    await reconnect(hub, identifier, address)
 
 
 class Hub:
@@ -217,13 +242,33 @@ class Hub:
         self.loop = loop
         self.lock = threading.Lock()
         self.outputs = {}  # identifier -> the queue the pacer fills for it
+        self.clients = {}  # identifier -> the connected pyatv device, while it is streaming
+        self.wanted = {}  # identifier -> address, for every receiver the user has ticked
+
+    def set_volume(self, identifier, level):
+        """Set the volume of a streaming receiver, from 0 to 100."""
+        client = self.clients.get(identifier)
+        if client is None:
+            return
+        level = max(0.0, min(100.0, float(level)))
+
+        async def apply():
+            await client.audio.set_volume(level)
+            emit("volume", identifier=identifier, level=level)
+
+        asyncio.run_coroutine_threadsafe(apply(), self.loop)
 
     def current_outputs(self):
         with self.lock:
             return list(self.outputs.values())
 
+    def wants(self, identifier):
+        with self.lock:
+            return identifier in self.wanted
+
     def add(self, identifier, address, gate=None):
         with self.lock:
+            self.wanted[identifier] = address
             if identifier in self.outputs:
                 return
         read_fd, write_fd = os.pipe()
@@ -236,10 +281,16 @@ class Hub:
         # A receiver added later does not wait for the others: the start gate is already open.
         gate = gate or StartGate(0)
         asyncio.run_coroutine_threadsafe(
-            stream_receiver(self.loop, identifier, address, reader, ready, gate), self.loop
+            stream_receiver(self.loop, identifier, address, reader, ready, gate, self), self.loop
         )
 
     def remove(self, identifier):
+        with self.lock:
+            self.wanted.pop(identifier, None)
+        self.drop_stream(identifier)
+
+    def drop_stream(self, identifier):
+        """End the stream for `identifier`, keeping it wanted (so it can be started again)."""
         with self.lock:
             out = self.outputs.pop(identifier, None)
         if out is not None:
@@ -261,6 +312,11 @@ def serve_control(path, hub):
                 parts = line.split()
                 if len(parts) == 3 and parts[0] == "add":
                     hub.add(parts[1], parts[2])
+                elif len(parts) == 3 and parts[0] == "volume":
+                    try:
+                        hub.set_volume(parts[1], parts[2])
+                    except ValueError:
+                        pass
                 elif len(parts) == 2 and parts[0] == "remove":
                     hub.remove(parts[1])
 

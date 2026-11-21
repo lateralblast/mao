@@ -5,6 +5,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-20
+
+### Added
+
+- A mute button at the left of each streaming AirPlay receiver's volume slider. Muting sets the receiver's volume to zero, and unmuting restores its previous level.
+
+## [0.7.0] - 2026-11-20
+
+### Added
+
+- A ticked AirPlay receiver that drops off the network, or fails to connect, is retried every 10 seconds until it returns or is unticked.
+
+## [0.6.9] - 2026-11-20
+
+### Added
+
+- Licensed under Apache-2.0: `LICENSE.md`, a licence section in the README, and the licence in the Cargo and npm metadata.
+
+## [0.6.8] - 2026-11-20
+
+### Added
+
+- A volume slider under each streaming AirPlay receiver, which sets that receiver's volume.
+
 ## [0.6.7] - 2026-11-20
 
 ### Changed
