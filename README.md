@@ -9,16 +9,19 @@ mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac'
 ## Features
 
 - **Several AirPlay receivers at once.** Tick any number of HomePods or other AirPlay receivers, and they play the same audio.
+- **Receivers by their real names.** Discovery uses each receiver's own name, and leaves out this Mac.
 - **One output on this Mac.** Tick the built-in speakers, headphones or another output, and macOS plays through it directly.
 - **Silent unless ticked.** Audio plays only where you send it. With nothing ticked, the Mac is muted.
 - **Start together.** Receivers begin playing once they have all connected, or after 10 seconds at most.
 - **Add and remove without interruption.** Ticking or unticking a receiver doesn't restart the others.
-- **Per-receiver volume and mute.** Each streaming receiver has a volume slider and a mute button. Muting keeps its level for when you unmute.
+- **Volume and mute for every streaming output.** Each AirPlay receiver, and each output on this Mac, has a volume slider and a mute button. Muting keeps the level for when you unmute.
 - **Reconnects by itself.** A ticked receiver that drops off the network is retried every 10 seconds.
-- **Remembers your outputs.** The outputs on this Mac you choose are saved. AirPlay receivers are ticked again each launch, once they have been found.
+- **Remembers your outputs.** The outputs on this Mac you choose are saved. AirPlay receivers are not, so tick them once they have been found.
 - **Follows the Mac's output at launch.** The output the Mac is using is ticked when mao starts.
+- **Shows when it is searching.** A spinner appears while receivers are being looked for.
 - **Finds devices as they change.** Receivers and outputs appear and disappear as you plug in or switch them off, without restarting mao.
 - **Menu bar app.** It has no Dock icon, and it can open at login from the info view.
+- **Info view.** It shows the version, the help text, and the attributions.
 - **Self-contained.** The streamer is bundled, so the app needs no Python installed.
 
 ## Quick start
@@ -83,9 +86,12 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 ## Limitations
 
 - **One output on this Mac at a time.** The Mac has one system output, so mao can't play on two outputs on this Mac at once. AirPlay receivers can be combined with it.
-- **Receivers drift apart.** They start together, but each has its own playback buffer, so they can drift. Sync between them has not been measured.
+- **Receivers drift apart.** They start together, but each has its own playback buffer. A measurement found Kitchen about 0.15 seconds behind Front Bedroom. mao doesn't correct this yet.
 - **A dropped receiver is retried every 10 seconds** while it is ticked. If it stays away, it shows an error until it returns or you untick it.
-- **Ticking or unticking an output on this Mac restarts the capture.** AirPlay receivers can drop for a moment when that happens.
+- **AirPlay receivers are not remembered between launches.** Tick them once they have been found.
+- **Volume and mute need a streaming receiver.** An AirPlay receiver's slider appears only while it is streaming. An output on this Mac needs a device that has a volume or mute control, and otherwise has no slider.
+- **An output on this Mac is the Mac's volume.** While it is the system output, its slider changes the Mac's volume.
+- **Ticking or unticking an output on this Mac restarts the capture.** This can cause a short gap in AirPlay audio.
 - **The Mac's output is muted unless an output on this Mac is ticked.** Quit mao to get normal playback back.
 - **The original output may not be restored.** mao restores the output it changed, but it can't tell what the output was if it was already the device you first ticked.
 - **The streamer starts a little slower** than a plain Python script, because PyInstaller unpacks it on each start.
