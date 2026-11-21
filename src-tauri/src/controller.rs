@@ -75,6 +75,8 @@ struct Inner {
     volumes: BTreeMap<String, f64>,
     /// Receivers muted by mao, with the volume to restore when they are unmuted.
     muted: BTreeMap<String, f64>,
+    /// The volume (0 to 100) and mute state of each selected output on this Mac.
+    local_levels: BTreeMap<String, (f64, bool)>,
     /// Where the captured audio goes: the streamer's stdin. Kept here, so the tap can be restarted
     /// without disturbing the streamer.
     feed: Feed,
@@ -201,6 +203,37 @@ impl Controller {
         Ok(())
     }
 
+    /// Sets the volume of a selected output on this Mac, 0 to 100.
+    pub fn set_local_volume(self: &Arc<Self>, app: &AppHandle, identifier: &str, level: f64) -> Result<(), String> {
+        let uid = stream::local_uid(identifier).ok_or("not an output on this Mac")?.to_string();
+        let tap = paths::tap_binary().ok_or("the audio tap is missing from the app")?;
+        let level = level.clamp(0.0, 100.0);
+        stream::set_local_volume(&tap, &uid, level)?;
+        let status = {
+            let mut inner = self.lock();
+            let muted = inner.local_levels.get(identifier).is_some_and(|(_, m)| *m);
+            inner.local_levels.insert(identifier.to_string(), (level, muted));
+            build_status(&inner)
+        };
+        let _ = app.emit(STATUS_EVENT, status);
+        Ok(())
+    }
+
+    /// Mutes or unmutes a selected output on this Mac.
+    pub fn set_local_mute(self: &Arc<Self>, app: &AppHandle, identifier: &str, muted: bool) -> Result<(), String> {
+        let uid = stream::local_uid(identifier).ok_or("not an output on this Mac")?.to_string();
+        let tap = paths::tap_binary().ok_or("the audio tap is missing from the app")?;
+        stream::set_local_mute(&tap, &uid, muted)?;
+        let status = {
+            let mut inner = self.lock();
+            let level = inner.local_levels.get(identifier).map(|(l, _)| *l).unwrap_or(50.0);
+            inner.local_levels.insert(identifier.to_string(), (level, muted));
+            build_status(&inner)
+        };
+        let _ = app.emit(STATUS_EVENT, status);
+        Ok(())
+    }
+
     /// Looks for receivers on the network in the background.
     pub fn refresh_scan(self: &Arc<Self>, app: &AppHandle) {
         {
@@ -272,6 +305,7 @@ impl Controller {
             if let Ok(local) = result {
                 self.set_local_locked(app, &mut inner, local);
             }
+            read_local_levels_locked(&mut inner);
             if inner.local_dirty {
                 // Another change arrived while we were reading: read again.
                 inner.local_dirty = false;
@@ -459,6 +493,7 @@ impl Controller {
                     .and_then(|tap| stream::set_system_output(&tap, &uid));
                 match result {
                     Ok(()) => {
+                        read_local_levels_locked(inner);
                         inner.links.insert(
                             identifier.clone(),
                             Link {
@@ -566,6 +601,45 @@ fn restore_output_locked(controller: &Controller, inner: &mut Inner) {
     }
 }
 
+/// The volume to show for a receiver: the output's own level, or the AirPlay receiver's reported one.
+fn volume_of(inner: &Inner, identifier: &str) -> Option<f64> {
+    if stream::is_local(identifier) {
+        inner.local_levels.get(identifier).map(|(level, _)| *level)
+    } else {
+        inner.volumes.get(identifier).copied()
+    }
+}
+
+fn muted_of(inner: &Inner, identifier: &str) -> bool {
+    if stream::is_local(identifier) {
+        inner.local_levels.get(identifier).is_some_and(|(_, muted)| *muted)
+    } else {
+        inner.muted.contains_key(identifier)
+    }
+}
+
+/// Reads the volume and mute state of the selected outputs on this Mac.
+fn read_local_levels_locked(inner: &mut Inner) {
+    let Some(tap) = paths::tap_binary() else {
+        return;
+    };
+    let selected: Vec<String> = inner
+        .saved
+        .selected
+        .iter()
+        .filter(|r| stream::is_local(&r.identifier))
+        .map(|r| r.identifier.clone())
+        .collect();
+    inner.local_levels.retain(|identifier, _| selected.contains(identifier));
+    for identifier in selected {
+        if let Some(uid) = stream::local_uid(&identifier) {
+            if let Ok(level) = stream::local_volume(&tap, uid) {
+                inner.local_levels.insert(identifier, level);
+            }
+        }
+    }
+}
+
 fn kind_of(identifier: &str) -> String {
     if stream::is_local(identifier) { "local" } else { "airplay" }.to_string()
 }
@@ -591,8 +665,8 @@ fn build_status(inner: &Inner) -> Status {
                 kind: kind_of(&r.identifier),
                 state,
                 message,
-                volume: inner.volumes.get(&r.identifier).copied(),
-                muted: inner.muted.contains_key(&r.identifier),
+                volume: volume_of(inner, &r.identifier),
+                muted: muted_of(inner, &r.identifier),
             }
         })
         .collect();
@@ -610,8 +684,8 @@ fn build_status(inner: &Inner) -> Status {
             kind: kind_of(&saved.identifier),
             state: "unavailable".into(),
             message: "not found on the network".into(),
-            volume: None,
-            muted: inner.muted.contains_key(&saved.identifier),
+            volume: volume_of(inner, &saved.identifier),
+            muted: muted_of(inner, &saved.identifier),
         });
     }
     receivers.sort_by_key(|r| r.name.to_lowercase());

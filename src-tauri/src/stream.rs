@@ -196,6 +196,56 @@ pub fn system_output(tap: &Path) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// The volume (0 to 100) and mute state of the output device `uid`.
+pub fn local_volume(tap: &Path, uid: &str) -> Result<(f64, bool), String> {
+    let output = Command::new(tap)
+        .arg("volume")
+        .arg(uid)
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not read the volume: {e}"))?;
+    if !output.status.success() {
+        return Err("this output has no volume control".into());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut parts = text.split_whitespace();
+    let level: f64 = parts.next().and_then(|p| p.parse().ok()).ok_or("could not read the volume")?;
+    let muted = parts.next() == Some("1");
+    Ok((level, muted))
+}
+
+/// Sets the volume (0 to 100) of the output device `uid`.
+pub fn set_local_volume(tap: &Path, uid: &str, level: f64) -> Result<(), String> {
+    let output = Command::new(tap)
+        .arg("set-volume")
+        .arg(uid)
+        .arg(format!("{level:.1}"))
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not set the volume: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err("could not set the volume of this output".into())
+    }
+}
+
+/// Mutes or unmutes the output device `uid`.
+pub fn set_local_mute(tap: &Path, uid: &str, muted: bool) -> Result<(), String> {
+    let output = Command::new(tap)
+        .arg("set-mute")
+        .arg(uid)
+        .arg(if muted { "1" } else { "0" })
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not set the mute: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err("this output cannot be muted".into())
+    }
+}
+
 /// Makes the output device `uid` the Mac's system output.
 pub fn set_system_output(tap: &Path, uid: &str) -> Result<(), String> {
     let output = Command::new(tap)

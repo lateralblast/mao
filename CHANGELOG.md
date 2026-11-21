@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-22
+
+### Added
+
+- A volume slider and mute button for an output on this Mac, the same as for AirPlay receivers. They set that output's own volume through the tap helper. While it is the Mac's system output, that is the Mac's volume.
+
 ## [0.7.1] - 2026-11-20
 
 ### Added

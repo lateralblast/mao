@@ -126,6 +126,16 @@ fn set_mute(identifier: String, muted: bool, app: AppHandle, controller: State<A
 }
 
 #[tauri::command]
+fn set_local_volume(identifier: String, level: f64, app: AppHandle, controller: State<Arc<Controller>>) -> Result<(), String> {
+    controller.set_local_volume(&app, &identifier, level)
+}
+
+#[tauri::command]
+fn set_local_mute(identifier: String, muted: bool, app: AppHandle, controller: State<Arc<Controller>>) -> Result<(), String> {
+    controller.set_local_mute(&app, &identifier, muted)
+}
+
+#[tauri::command]
 fn refresh_receivers(app: AppHandle, controller: State<Arc<Controller>>) {
     controller.refresh_scan(&app);
 }
@@ -221,7 +231,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {

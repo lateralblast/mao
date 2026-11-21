@@ -135,7 +135,12 @@ function volumeRow(receiver) {
   mute.append(speakerIcon(receiver.muted));
   mute.addEventListener("click", async () => {
     try {
-      await invoke("set_mute", { identifier: receiver.identifier, muted: !receiver.muted });
+      const muted = !receiver.muted;
+      if (receiver.kind === "local") {
+        await invoke("set_local_mute", { identifier: receiver.identifier, muted });
+      } else {
+        await invoke("set_mute", { identifier: receiver.identifier, muted });
+      }
     } catch (err) {
       errorLine.hidden = false;
       errorLine.textContent = String(err);
@@ -164,7 +169,12 @@ function volumeRow(receiver) {
   });
   slider.addEventListener("change", async () => {
     try {
-      await invoke("set_volume", { identifier: receiver.identifier, level: Number(slider.value) });
+      const level = Number(slider.value);
+      if (receiver.kind === "local") {
+        await invoke("set_local_volume", { identifier: receiver.identifier, level });
+      } else {
+        await invoke("set_volume", { identifier: receiver.identifier, level });
+      }
     } catch (err) {
       errorLine.hidden = false;
       errorLine.textContent = String(err);

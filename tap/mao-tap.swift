@@ -253,12 +253,99 @@ func runSetOutput(uid: String) -> Never {
     exit(0)
 }
 
+// MARK: - Volume and mute of an output device
+
+/// The device's output volume scalar on `element`, or nil if it has none there.
+func volumeScalar(_ device: AudioObjectID, element: UInt32) -> Float32? {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+                                          mScope: kAudioDevicePropertyScopeOutput, mElement: element)
+    guard AudioObjectHasProperty(device, &addr) else { return nil }
+    var value: Float32 = 0
+    var size = UInt32(MemoryLayout<Float32>.size)
+    guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &value) == 0 else { return nil }
+    return value
+}
+
+func setVolumeScalar(_ device: AudioObjectID, element: UInt32, _ value: Float32) -> Bool {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+                                          mScope: kAudioDevicePropertyScopeOutput, mElement: element)
+    guard AudioObjectHasProperty(device, &addr) else { return false }
+    var v = value
+    return AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<Float32>.size), &v) == 0
+}
+
+/// The output volume as 0 to 100: the master element if the device has one, else the left channel.
+func outputLevel(_ device: AudioObjectID) -> Double? {
+    let value = volumeScalar(device, element: 0) ?? volumeScalar(device, element: 1)
+    return value.map { Double($0) * 100 }
+}
+
+/// Sets the output volume (0 to 100) on the master element, or on both channels if there is none.
+func setOutputLevel(_ device: AudioObjectID, _ level: Double) -> Bool {
+    let value = Float32(max(0, min(100, level)) / 100)
+    if setVolumeScalar(device, element: 0, value) { return true }
+    let left = setVolumeScalar(device, element: 1, value)
+    let right = setVolumeScalar(device, element: 2, value)
+    return left || right
+}
+
+func outputMuted(_ device: AudioObjectID) -> Bool? {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                                          mScope: kAudioDevicePropertyScopeOutput, mElement: 0)
+    guard AudioObjectHasProperty(device, &addr) else { return nil }
+    var value: UInt32 = 0
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &value) == 0 else { return nil }
+    return value != 0
+}
+
+func setOutputMuted(_ device: AudioObjectID, _ muted: Bool) -> Bool {
+    var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                                          mScope: kAudioDevicePropertyScopeOutput, mElement: 0)
+    guard AudioObjectHasProperty(device, &addr) else { return false }
+    var value: UInt32 = muted ? 1 : 0
+    return AudioObjectSetPropertyData(device, &addr, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value) == 0
+}
+
+/// Prints "LEVEL MUTED" for the output device `uid`, e.g. "49.0 0".
+func runVolume(uid: String) -> Never {
+    guard let device = deviceID(forUID: uid), let level = outputLevel(device) else {
+        fail("this output has no volume control")
+    }
+    let muted = outputMuted(device) ?? false
+    print(String(format: "%.1f %d", level, muted ? 1 : 0))
+    exit(0)
+}
+
+func runSetVolume(uid: String, level: Double) -> Never {
+    guard let device = deviceID(forUID: uid), setOutputLevel(device, level) else {
+        fail("could not set the volume of \(uid)")
+    }
+    exit(0)
+}
+
+func runSetMute(uid: String, muted: Bool) -> Never {
+    guard let device = deviceID(forUID: uid), setOutputMuted(device, muted) else {
+        fail("this output cannot be muted")
+    }
+    exit(0)
+}
+
 // MARK: - Entry point
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 switch arguments.first {
 case "devices": runDevices()
 case "output": runOutput()
+case "volume":
+    guard arguments.count >= 2 else { fail("volume needs a device UID") }
+    runVolume(uid: arguments[1])
+case "set-volume":
+    guard arguments.count >= 3, let level = Double(arguments[2]) else { fail("set-volume needs a UID and a level") }
+    runSetVolume(uid: arguments[1], level: level)
+case "set-mute":
+    guard arguments.count >= 3 else { fail("set-mute needs a UID and 0 or 1") }
+    runSetMute(uid: arguments[1], muted: arguments[2] == "1")
 case "set-output":
     guard arguments.count >= 2 else { fail("set-output needs a device UID") }
     runSetOutput(uid: arguments[1])
