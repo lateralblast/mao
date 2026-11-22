@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-22
+
+### Changed
+
+- Open at login uses the macOS login-item API on macOS 13 and later, which needs no file in `~/Library/LaunchAgents`. Older macOS, or a refusal from the API, falls back to the LaunchAgent. The README explains how to fix a root-owned LaunchAgents folder.
+
 ## [0.8.3] - 2026-11-22
 
 ### Added

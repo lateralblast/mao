@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.8.3
+Version: 0.8.4
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -101,7 +101,22 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 
 ## Open at login
 
-The info view has an *Open mao at login* switch. It writes a LaunchAgent to `~/Library/LaunchAgents/au.com.lateralblast.mao.plist`, which opens the installed app quietly at login. The switch needs the installed app, so it is disabled when running from a build directory.
+The info view has an *Open mao at login* switch. How it works depends on your macOS version:
+
+- **macOS 13 and later:** mao registers itself as a login item, using the system's login-item API. It shows under Login Items in System Settings, where you can also switch it off. Nothing is written to your home folder.
+- **Older macOS, or if the login-item API refuses:** mao writes a LaunchAgent to `~/Library/LaunchAgents/au.com.lateralblast.mao.plist`, which opens the installed app quietly at login.
+
+The switch needs the installed app, so it is disabled when running from a build directory.
+
+### If the login switch shows "Permission denied"
+
+This happens with the LaunchAgent method when `~/Library/LaunchAgents` is owned by root. Some installers create that folder as root. To give your own user ownership of it, run this in Terminal, and enter your password when asked:
+
+```sh
+sudo chown "$(whoami)" ~/Library/LaunchAgents
+```
+
+Then turn the switch on again. Alternatively, use macOS 13 or later, where the login-item method doesn't need that folder.
 
 ## Project layout
 
