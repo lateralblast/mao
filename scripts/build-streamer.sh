@@ -15,7 +15,7 @@ OUT="$ROOT/src-tauri/binaries/mao-stream-$TRIPLE"
 
 [ -x "$PYTHON" ] || { echo "build-streamer: no Python environment at $PYTHON: run scripts/setup-python.sh" >&2; exit 1; }
 
-"$PYTHON" -m pip install --quiet -r "$ROOT/python/requirements-build.txt"
+PIP_DISABLE_PIP_VERSION_CHECK=1 "$PYTHON" -m pip install --quiet -r "$ROOT/python/requirements-build.txt"
 
 rm -rf "$WORK"
 mkdir -p "$WORK" "$(dirname "$OUT")"
