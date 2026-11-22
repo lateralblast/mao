@@ -8,13 +8,13 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [ ] Check the audio-capture permission flow on a clean account, and what happens if the user denies it.
 - [ ] Per-receiver delay: hold each receiver back by its own amount, so receivers line up. Fixes the measured offset (Kitchen about 0.15 s behind Front Bedroom).
 - [ ] Built-in sync check: a popover button that runs the click-track measurement and shows the result.
-- [ ] Remember AirPlay receivers between launches, once discovery has finished.
 - [ ] Presets: save a set of receivers and outputs, and switch between them.
 - [ ] Several outputs on this Mac at once. The Mac has one system output, so this needs a different approach, such as an aggregate device, and it brings back the clock problems seen earlier.
 - [ ] Volume that follows the Mac's volume keys. May not be possible through pyatv.
 
 ## Done
 
+- [x] Remember AirPlay receivers (0.8.5): an info-view switch, off by default, that starts remembered receivers once the launch search has found them.
 - [x] Notify when a ticked receiver is lost (0.8.2): one macOS notification per drop.
 - [x] Tray icon state (0.8.1): a dot on the menu bar icon while anything is streaming.
 - [x] Mute all, with a global keyboard shortcut (0.8.0): a header button, and Option+Command+M.

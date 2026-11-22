@@ -257,6 +257,7 @@ const infoView = document.getElementById("info-view");
 function showInfo(about) {
   refreshLoginItem();
   refreshNotifications();
+  refreshRemember();
   document.getElementById("version").textContent = `Version ${about.version}`;
   document.getElementById("help-title").textContent = about.help_title;
   renderHelp(about.help);
@@ -300,6 +301,29 @@ async function refreshNotifications() {
     errorLine.textContent = String(err);
   }
 }
+
+const rememberSetting = document.getElementById("remember-setting");
+const rememberToggle = document.getElementById("remember-toggle");
+rememberSetting.addEventListener("click", (event) => event.stopPropagation());
+
+async function refreshRemember() {
+  try {
+    rememberToggle.checked = await invoke("get_remember_receivers");
+  } catch (err) {
+    errorLine.hidden = false;
+    errorLine.textContent = String(err);
+  }
+}
+
+rememberToggle.addEventListener("change", async () => {
+  try {
+    rememberToggle.checked = await invoke("set_remember_receivers", { enabled: rememberToggle.checked });
+  } catch (err) {
+    rememberToggle.checked = !rememberToggle.checked;
+    errorLine.hidden = false;
+    errorLine.textContent = String(err);
+  }
+});
 
 notifyToggle.addEventListener("change", async () => {
   try {

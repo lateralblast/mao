@@ -30,6 +30,9 @@ struct Saved {
     /// Whether to show a notification when a receiver is lost. Off by default.
     #[serde(default)]
     notify_on_drop: bool,
+    /// Whether AirPlay receivers are remembered between launches. Off by default.
+    #[serde(default)]
+    remember_receivers: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -101,6 +104,8 @@ struct Inner {
     streamer: Option<RunningStreamer>,
     /// Bumped on every streamer restart, so late output from an old streamer is ignored.
     generation: u64,
+    /// At launch, with receivers remembered: they are not started until the search has found them.
+    startup_pending: bool,
     error: Option<String>,
 }
 
@@ -147,6 +152,8 @@ impl Controller {
     /// what the Mac is playing through.
     pub fn start_saved(self: &Arc<Self>, app: &AppHandle) {
         let mut inner = self.lock();
+        inner.startup_pending = inner.saved.remember_receivers
+            && inner.saved.selected.iter().any(|r| !stream::is_local(&r.identifier));
         if let Some(tap) = paths::tap_binary() {
             if let (Ok(current), Ok(local)) = (stream::system_output(&tap), stream::local_devices(&tap)) {
                 if let Some(device) = local
@@ -183,6 +190,17 @@ impl Controller {
         drop(inner);
         let _ = app.emit(STATUS_EVENT, status.clone());
         Ok(status)
+    }
+
+    pub fn remember_receivers(&self) -> bool {
+        self.lock().saved.remember_receivers
+    }
+
+    pub fn set_remember_receivers(&self, enabled: bool) -> Result<(), String> {
+        let mut inner = self.lock();
+        inner.saved.remember_receivers = enabled;
+        let saved = inner.saved.clone();
+        self.save(&saved)
     }
 
     pub fn notify_on_drop(&self) -> bool {
@@ -361,6 +379,15 @@ impl Controller {
                             }
                         }
                         let mut changed = remap_local(&mut inner.saved.selected, &available);
+                        if inner.startup_pending {
+                            // The search has finished: keep only the remembered receivers it found.
+                            inner.startup_pending = false;
+                            inner
+                                .saved
+                                .selected
+                                .retain(|r| stream::is_local(&r.identifier) || available.iter().any(|a| a.identifier == r.identifier));
+                            changed = true;
+                        }
                         if let Some(local) = &local {
                             changed |= prune_missing_locals(&mut inner.saved.selected, local);
                         }
@@ -370,7 +397,14 @@ impl Controller {
                         let saved = inner.saved.clone();
                         let _ = controller.save(&saved);
                     }
-                    Err(error) => inner.error = Some(error),
+                    Err(error) => {
+                        // The search failed: start the remembered receivers anyway, and let errors show.
+                        if inner.startup_pending {
+                            inner.startup_pending = false;
+                            controller.sync_locked(&app, &mut inner);
+                        }
+                        inner.error = Some(error);
+                    }
                 }
             }
             let _ = app.emit(STATUS_EVENT, controller.status());
@@ -476,13 +510,18 @@ impl Controller {
         let selected: Vec<String> = inner.saved.selected.iter().map(|r| r.identifier.clone()).collect();
         inner.links.retain(|identifier, _| selected.contains(identifier));
 
-        let airplay: Vec<Receiver> = inner
-            .saved
-            .selected
-            .iter()
-            .filter(|r| !stream::is_local(&r.identifier))
-            .cloned()
-            .collect();
+        // Remembered receivers wait for the launch-time search before they are started.
+        let airplay: Vec<Receiver> = if inner.startup_pending {
+            Vec::new()
+        } else {
+            inner
+                .saved
+                .selected
+                .iter()
+                .filter(|r| !stream::is_local(&r.identifier))
+                .cloned()
+                .collect()
+        };
         let local: Option<String> = selected.iter().find(|id| stream::is_local(id)).cloned();
 
         // The capture tap feeds AirPlay, and mutes the Mac's output when nothing is selected.
@@ -861,7 +900,9 @@ pub fn remap_local(saved: &mut [Receiver], available: &[Receiver]) -> bool {
 /// then fails. At launch the Mac's current output decides the local selection.
 fn persistable(saved: &Saved) -> Saved {
     let mut kept = saved.clone();
-    kept.selected.retain(|r| stream::is_local(&r.identifier));
+    if !saved.remember_receivers {
+        kept.selected.retain(|r| stream::is_local(&r.identifier));
+    }
     kept
 }
 
@@ -925,6 +966,7 @@ mod tests {
                 selected: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("C", "Study", "10.0.0.3")],
                 original_output: None,
                 notify_on_drop: false,
+                remember_receivers: false,
             },
             available: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("B", "Lounge", "10.0.0.2")],
             links: BTreeMap::from([(
@@ -975,6 +1017,7 @@ mod tests {
             ],
             original_output: Some("BuiltInSpeakerDevice".into()),
             notify_on_drop: false,
+            remember_receivers: false,
         };
         let kept = persistable(&saved);
         assert_eq!(kept.selected.len(), 1);
@@ -994,6 +1037,17 @@ mod tests {
         let ids: Vec<&str> = saved.iter().map(|r| r.identifier.as_str()).collect();
         assert_eq!(ids, vec!["local:Here", "B2:5B"]);
         assert!(!prune_missing_locals(&mut saved, &present), "a second pass changes nothing");
+    }
+
+    #[test]
+    fn airplay_receivers_are_kept_only_when_remembered() {
+        let mut saved = Saved {
+            selected: vec![receiver("B2:5B", "Kitchen", "10.0.0.1")],
+            ..Saved::default()
+        };
+        assert!(persistable(&saved).selected.is_empty());
+        saved.remember_receivers = true;
+        assert_eq!(persistable(&saved).selected.len(), 1);
     }
 
     #[test]

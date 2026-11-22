@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.8.4
+Version: 0.8.5
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -17,7 +17,7 @@ mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac'
 - **Add and remove without interruption.** Ticking or unticking a receiver doesn't restart the others.
 - **Volume and mute for every streaming output.** Each AirPlay receiver, and each output on this Mac, has a volume slider and a mute button. Muting keeps the level for when you unmute.
 - **Reconnects by itself.** A ticked receiver that drops off the network is retried every 10 seconds. A macOS notification can say when one drops, if you turn that on in the info view (off by default).
-- **Remembers your outputs.** The outputs on this Mac you choose are saved. AirPlay receivers are not, so tick them once they have been found.
+- **Remembers your outputs.** The outputs on this Mac you choose are saved. AirPlay receivers can be remembered too, with the *Remember AirPlay receivers* switch in the info view (off by default). Remembered receivers start once the launch-time search has found them.
 - **Follows the Mac's output at launch.** The output the Mac is using is ticked when mao starts.
 - **Shows when it is searching.** A spinner appears while receivers are being looked for.
 - **Finds devices as they change.** Receivers and outputs appear and disappear as you plug in or switch them off, without restarting mao. An output on this Mac that is no longer present is removed from the selection.
@@ -89,7 +89,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 - **One output on this Mac at a time.** The Mac has one system output, so mao can't play on two outputs on this Mac at once. AirPlay receivers can be combined with it.
 - **Receivers drift apart.** They start together, but each has its own playback buffer. A measurement found Kitchen about 0.15 seconds behind Front Bedroom. mao doesn't correct this yet.
 - **A dropped receiver is retried every 10 seconds** while it is ticked. If it stays away, it shows an error until it returns or you untick it.
-- **AirPlay receivers are not remembered between launches.** Tick them once they have been found.
+- **AirPlay receivers are not remembered by default.** Turn on *Remember AirPlay receivers* in the info view to keep them. Without it, tick them once they have been found.
 - **Volume and mute need a streaming receiver.** An AirPlay receiver's slider appears only while it is streaming. An output on this Mac needs a device that has a volume or mute control, and otherwise has no slider.
 - **An output on this Mac is the Mac's volume.** While it is the system output, its slider changes the Mac's volume.
 - **Ticking or unticking an output on this Mac restarts the capture.** This can cause a short gap in AirPlay audio.
