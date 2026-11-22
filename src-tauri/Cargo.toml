@@ -1,6 +1,6 @@
 [package]
 name = "mao"
-version = "0.8.5"
+version = "0.8.6"
 description = "Multi AirPlay Output: send system audio to several AirPlay receivers at once"
 license = "Apache-2.0"
 edition = "2021"

@@ -108,6 +108,8 @@ header .title {
   min-height: 0;
   overflow-y: auto;
   cursor: default;
+  /* Keep the text clear of the scroll bar. */
+  padding-right: 18px;
 }
 
 .info-view h2 {
@@ -368,4 +370,11 @@ footer {
   height: 16px;
   display: block;
   margin: 0 auto;
+}
+
+/* Let long words and links wrap, so they never run under the scroll bar. */
+.info-view,
+.info-view .help,
+.info-view .help a {
+  overflow-wrap: anywhere;
 }
