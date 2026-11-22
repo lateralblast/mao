@@ -1,17 +1,19 @@
 #!/bin/sh
-# commit: stage the new and changed files (git add -A, which respects .gitignore), then commit
-# them with the newest CHANGELOG.md entry as the message. It does not push.
+# commit: stage the new and changed files (git add -A, which respects .gitignore), commit them
+# with the newest CHANGELOG.md entry as the message, and with --push, push the branch.
 #
-#   ./commit            stage and commit
-#   ./commit --dry-run  show the files and the message, and change nothing (--dryrun also works)
-#   ./commit --help     show this help
+#   ./commit                 stage and commit
+#   ./commit --push          stage, commit (if there is anything to commit), then push
+#   ./commit --dry-run       show what would be committed and pushed, and change nothing
+#                            (--dryrun also works)
+#   ./commit --help          show this help
 set -eu
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
 cd "$ROOT"
 
 usage() {
-    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -20,12 +22,15 @@ fail() {
 }
 
 dry=0
-case "${1:-}" in
-    "") ;;
-    --dry-run|--dryrun) dry=1 ;;
-    --help|-h) usage; exit 0 ;;
-    *) fail "unknown option $1 (try --help)" ;;
-esac
+push=0
+for arg in "$@"; do
+    case "$arg" in
+        --push) push=1 ;;
+        --dry-run|--dryrun) dry=1 ;;
+        --help|-h) usage; exit 0 ;;
+        *) fail "unknown option $arg (try --help)" ;;
+    esac
+done
 
 [ -f CHANGELOG.md ] || fail "no CHANGELOG.md here"
 
@@ -52,20 +57,46 @@ trap 'rm -f "$message_file"' EXIT
 
 git add -A
 
+committed=0
 if git diff --cached --quiet; then
+    echo "nothing new to commit"
+else
+    committed=1
+    if [ "$dry" = 1 ]; then
+        echo "files that would be committed:"
+        git diff --cached --name-status | sed 's/^/  /'
+        echo
+        echo "message:"
+        sed 's/^/  /' "$message_file"
+        echo
+    else
+        git commit -q -F "$message_file"
+        git log -1 --format='committed %h: %s'
+    fi
+fi
+
+# Leave the index as it was for a dry run.
+[ "$dry" = 0 ] || git reset -q
+
+if [ "$push" = 1 ]; then
+    branch=$(git symbolic-ref --quiet --short HEAD) || fail "HEAD is not on a branch: check out a branch to push"
+    if git rev-parse --quiet --verify '@{u}' >/dev/null; then
+        ahead=$(git rev-list --count '@{u}..HEAD')
+        if [ "$dry" = 1 ]; then
+            [ "$ahead" -gt 0 ] || [ "$committed" = 1 ] && echo "would push $branch ($ahead commit(s) ahead, plus the commit above)"
+            [ "$ahead" -gt 0 ] || [ "$committed" = 1 ] || echo "nothing to push"
+        elif [ "$ahead" -gt 0 ] || [ "$committed" = 1 ]; then
+            git push
+        else
+            echo "nothing to push"
+        fi
+    else
+        if [ "$dry" = 1 ]; then
+            echo "would push $branch and set its upstream to origin/$branch"
+        else
+            git push -u origin "$branch"
+        fi
+    fi
+elif [ "$committed" = 0 ]; then
     fail "nothing to commit"
 fi
-
-if [ "$dry" = 1 ]; then
-    echo "files that would be committed:"
-    git diff --cached --name-status | sed 's/^/  /'
-    echo
-    echo "message:"
-    sed 's/^/  /' "$message_file"
-    # Leave the index as it was before this run.
-    git reset -q
-    exit 0
-fi
-
-git commit -q -F "$message_file"
-git log -1 --format='committed %h: %s'
