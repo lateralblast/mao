@@ -61,7 +61,6 @@ subject=$(printf '%s' "$subject" | awk '{ if (length($0) > 72) { s = substr($0, 
 {
     printf '%s\n\n' "$subject"
     printf '%s\n' "$body"
-    printf '\nCo-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\n'
 } > "$message_file"
 
 git add -A
