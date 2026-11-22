@@ -1,6 +1,6 @@
 {
   "name": "mao",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "Multi AirPlay Output: send system audio to several AirPlay receivers at once",
   "scripts": {

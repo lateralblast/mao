@@ -248,12 +248,11 @@ impl Controller {
         let controller = Arc::clone(self);
         let app = app.clone();
         std::thread::spawn(move || {
-            let local = paths::tap_binary()
-                .map(|tap| stream::local_devices(&tap).unwrap_or_default())
-                .unwrap_or_default();
+            // None when the outputs on this Mac could not be listed, so a failed listing removes nothing.
+            let local: Option<Vec<Receiver>> = paths::tap_binary().and_then(|tap| stream::local_devices(&tap).ok());
             let result = match paths::streamer(&app) {
                 Some(runner) => stream::scan(&runner).map(|mut found| {
-                    found.extend(local.clone());
+                    found.extend(local.clone().unwrap_or_default());
                     found
                 }),
                 None => Err("the streamer is missing from the app".to_string()),
@@ -272,7 +271,11 @@ impl Controller {
                                 saved.name = fresh.name.clone();
                             }
                         }
-                        if remap_local(&mut inner.saved.selected, &available) {
+                        let mut changed = remap_local(&mut inner.saved.selected, &available);
+                        if let Some(local) = &local {
+                            changed |= prune_missing_locals(&mut inner.saved.selected, local);
+                        }
+                        if changed {
                             controller.sync_locked(&app, &mut inner);
                         }
                         let saved = inner.saved.clone();
@@ -323,8 +326,10 @@ impl Controller {
     /// remapped, and the routing is brought in line with it.
     fn set_local_locked(self: &Arc<Self>, app: &AppHandle, inner: &mut Inner, local: Vec<Receiver>) {
         inner.available.retain(|r| !stream::is_local(&r.identifier));
+        let mut changed = remap_local(&mut inner.saved.selected, &local);
+        changed |= prune_missing_locals(&mut inner.saved.selected, &local);
         inner.available.extend(dedupe(local));
-        if remap_local(&mut inner.saved.selected, &inner.available) {
+        if changed {
             let saved = inner.saved.clone();
             let _ = self.save(&saved);
             self.sync_locked(app, inner);
@@ -745,6 +750,13 @@ fn persistable(saved: &Saved) -> Saved {
     kept
 }
 
+/// Removes selected outputs on this Mac that are no longer present. Returns whether any were removed.
+pub fn prune_missing_locals(saved: &mut Vec<Receiver>, present: &[Receiver]) -> bool {
+    let before = saved.len();
+    saved.retain(|r| !stream::is_local(&r.identifier) || present.iter().any(|p| p.identifier == r.identifier));
+    saved.len() != before
+}
+
 /// One entry per receiver. Discovery can report the same device at several addresses.
 fn dedupe(found: Vec<Receiver>) -> Vec<Receiver> {
     let mut unique: Vec<Receiver> = Vec::new();
@@ -851,6 +863,20 @@ mod tests {
         assert_eq!(kept.selected.len(), 1);
         assert_eq!(kept.selected[0].name, "External Headphones");
         assert_eq!(kept.original_output.as_deref(), Some("BuiltInSpeakerDevice"));
+    }
+
+    #[test]
+    fn prune_removes_only_missing_outputs_on_this_mac() {
+        let mut saved = vec![
+            receiver("local:Gone", "Gone", ""),
+            receiver("local:Here", "Here", ""),
+            receiver("B2:5B", "Kitchen", "10.0.0.1"),
+        ];
+        let present = vec![receiver("local:Here", "Here", "")];
+        assert!(prune_missing_locals(&mut saved, &present));
+        let ids: Vec<&str> = saved.iter().map(|r| r.identifier.as_str()).collect();
+        assert_eq!(ids, vec!["local:Here", "B2:5B"]);
+        assert!(!prune_missing_locals(&mut saved, &present), "a second pass changes nothing");
     }
 
     #[test]

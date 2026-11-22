@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.7.2
+Version: 0.7.3
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -19,7 +19,7 @@ mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac'
 - **Remembers your outputs.** The outputs on this Mac you choose are saved. AirPlay receivers are not, so tick them once they have been found.
 - **Follows the Mac's output at launch.** The output the Mac is using is ticked when mao starts.
 - **Shows when it is searching.** A spinner appears while receivers are being looked for.
-- **Finds devices as they change.** Receivers and outputs appear and disappear as you plug in or switch them off, without restarting mao.
+- **Finds devices as they change.** Receivers and outputs appear and disappear as you plug in or switch them off, without restarting mao. An output on this Mac that is no longer present is removed from the selection.
 - **Menu bar app.** It has no Dock icon, and it can open at login from the info view.
 - **Info view.** It shows the version, the help text, and the attributions.
 - **Self-contained.** The streamer is bundled, so the app needs no Python installed.

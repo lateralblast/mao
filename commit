@@ -1,0 +1,71 @@
+#!/bin/sh
+# commit: stage the new and changed files (git add -A, which respects .gitignore), then commit
+# them with the newest CHANGELOG.md entry as the message. It does not push.
+#
+#   ./commit            stage and commit
+#   ./commit --dry-run  show the files and the message, and change nothing (--dryrun also works)
+#   ./commit --help     show this help
+set -eu
+
+ROOT=$(cd "$(dirname "$0")" && pwd)
+cd "$ROOT"
+
+usage() {
+    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+fail() {
+    printf 'commit: %s\n' "$*" >&2
+    exit 1
+}
+
+dry=0
+case "${1:-}" in
+    "") ;;
+    --dry-run|--dryrun) dry=1 ;;
+    --help|-h) usage; exit 0 ;;
+    *) fail "unknown option $1 (try --help)" ;;
+esac
+
+[ -f CHANGELOG.md ] || fail "no CHANGELOG.md here"
+
+# The newest version's heading, skipping [Unreleased].
+heading=$(awk '/^## \[/ && !/^## \[Unreleased\]/ { print; exit }' CHANGELOG.md)
+[ -n "$heading" ] || fail "no version entry found in CHANGELOG.md"
+version=$(printf '%s\n' "$heading" | sed 's/^## \[\([^]]*\)\].*/\1/')
+
+# The entry's body: everything under the heading, up to the next version heading.
+body=$(awk -v heading="$heading" '
+    $0 == heading { inside = 1; next }
+    /^## \[/ && inside { exit }
+    inside && !started && /^$/ { next }
+    inside { started = 1; print }
+' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')
+
+message_file=$(mktemp)
+trap 'rm -f "$message_file"' EXIT
+{
+    printf 'mao %s\n\n' "$version"
+    printf '%s\n' "$body"
+    printf '\nCo-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\n'
+} > "$message_file"
+
+git add -A
+
+if git diff --cached --quiet; then
+    fail "nothing to commit"
+fi
+
+if [ "$dry" = 1 ]; then
+    echo "files that would be committed:"
+    git diff --cached --name-status | sed 's/^/  /'
+    echo
+    echo "message:"
+    sed 's/^/  /' "$message_file"
+    # Leave the index as it was before this run.
+    git reset -q
+    exit 0
+fi
+
+git commit -q -F "$message_file"
+git log -1 --format='committed %h: %s'
