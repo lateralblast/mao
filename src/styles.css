@@ -378,3 +378,72 @@ footer {
 .info-view .help a {
   overflow-wrap: anywhere;
 }
+
+/* The calibration sheet covers the popover. */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.sheet-body {
+  padding: 14px 18px 14px 14px;
+}
+
+.sheet h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.sheet p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sheet .step {
+  font-weight: 600;
+}
+
+.sheet .results {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.sheet .sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.sheet button {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--row);
+  color: var(--fg);
+  font: inherit;
+  cursor: default;
+}
+
+.sheet button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#calibrate {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--row);
+  color: var(--fg);
+  font: inherit;
+  cursor: default;
+}

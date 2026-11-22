@@ -104,6 +104,11 @@ impl RunningStreamer {
         Ok(())
     }
 
+    /// Holds the receiver `identifier` back by `milliseconds`.
+    pub fn set_delay(&self, identifier: &str, milliseconds: f64) -> Result<(), String> {
+        self.send(&format!("delay {identifier} {milliseconds:.0}"))
+    }
+
     /// Sets the volume (0 to 100) of the streaming receiver `identifier`.
     pub fn set_volume(&self, identifier: &str, level: f64) -> Result<(), String> {
         self.send(&format!("volume {identifier} {level:.0}"))
@@ -346,4 +351,67 @@ mod hardware_tests {
         tap.stop();
         assert!(seen.iter().any(|l| l.contains("\"streaming\"")), "never reached streaming: {seen:?}");
     }
+}
+
+/// Writes the calibration click track to `path`.
+pub fn write_click_track(runner: &Runner, path: &Path) -> Result<(), String> {
+    let status = runner
+        .command(&["clicks".to_string(), path.to_string_lossy().into_owned()])
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("could not make the click track: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err("could not make the click track".into())
+    }
+}
+
+/// How late a receiver's clicks were in a recording, against the click track.
+#[derive(Deserialize)]
+pub struct Lag {
+    pub lag_ms: f64,
+}
+
+/// Measures how late the clicks in `recording` are, against the click track at `clicks`.
+pub fn find_lag(runner: &Runner, recording: &Path, clicks: &Path) -> Result<Lag, String> {
+    let output = runner
+        .command(&[
+            "lag".to_string(),
+            recording.to_string_lossy().into_owned(),
+            clicks.to_string_lossy().into_owned(),
+        ])
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("could not measure the clicks: {e}"))?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stdout).map_err(|_| "could not read the measurement".to_string())?;
+    if let Some(error) = value["error"].as_str() {
+        return Err(error.to_string());
+    }
+    serde_json::from_value(value).map_err(|e| format!("could not read the measurement: {e}"))
+}
+
+/// Records the microphone for `seconds` into `path`, in the background. Wait on the child to finish.
+pub fn start_recording(tap: &Path, seconds: f64, path: &Path) -> Result<Child, String> {
+    Command::new(tap)
+        .arg("record")
+        .arg(format!("{seconds:.0}"))
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("could not start the recording: {e}"))
+}
+
+/// Plays `path` through the Mac's output, in the background.
+pub fn start_playing(path: &Path) -> Result<Child, String> {
+    Command::new("/usr/bin/afplay")
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("could not play the click track: {e}"))
 }

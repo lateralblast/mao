@@ -1,5 +1,6 @@
 //! mao: a menu bar app that sends system audio to several AirPlay receivers at once.
 
+mod calibrate;
 mod controller;
 mod devices;
 mod login;
@@ -134,6 +135,16 @@ fn get_remember_receivers(controller: State<Arc<Controller>>) -> bool {
 fn set_remember_receivers(enabled: bool, controller: State<Arc<Controller>>) -> Result<bool, String> {
     controller.set_remember_receivers(enabled)?;
     Ok(controller.remember_receivers())
+}
+
+#[tauri::command]
+fn start_calibration(app: AppHandle, controller: State<Arc<Controller>>) -> Result<(), String> {
+    calibrate::start(Arc::clone(&controller), app)
+}
+
+#[tauri::command]
+fn cancel_calibration(controller: State<Arc<Controller>>) {
+    calibrate::cancel(&controller);
 }
 
 #[tauri::command]
@@ -284,7 +295,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute, toggle_mute_all, get_notify_on_drop, set_notify_on_drop, get_remember_receivers, set_remember_receivers])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute, toggle_mute_all, get_notify_on_drop, set_notify_on_drop, get_remember_receivers, set_remember_receivers, start_calibration, cancel_calibration])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {

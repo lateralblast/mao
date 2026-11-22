@@ -15,6 +15,7 @@ Progress goes to stdout as one JSON object per line, for example:
     {"event": "receiver", "identifier": "...", "state": "streaming", "message": ""}
 """
 
+import array
 import asyncio
 import io
 import json
@@ -25,6 +26,7 @@ import struct
 import sys
 import threading
 import time
+import wave
 
 import pyatv
 from pyatv.const import Protocol
@@ -35,7 +37,7 @@ BYTES_PER_FRAME = CHANNELS * 2
 TICK_SECONDS = 0.02
 TICK_BYTES = int(RATE * BYTES_PER_FRAME * TICK_SECONDS)  # 20 ms = 3840 bytes
 MAX_PENDING_BYTES = RATE * BYTES_PER_FRAME // 4  # keep at most 250 ms of backlog
-RECEIVER_QUEUE_TICKS = 250  # about 5 s of audio per receiver before dropping
+RECEIVER_QUEUE_TICKS = 500  # about 10 s of audio per receiver before dropping, to allow for a delay
 SCAN_TIMEOUT = 6
 HOST_TIMEOUT = 3
 # Longest wait for every receiver to connect before they all start together.
@@ -135,7 +137,7 @@ def pace(source, current_outputs):
         chunk = take_tick(pending)
         for out in current_outputs():
             try:
-                out.put_nowait(chunk)
+                out.put_nowait((time.monotonic(), chunk))
             except queue.Full:
                 pass  # this receiver is behind: drop audio rather than stall the others
         deadline += TICK_SECONDS
@@ -148,17 +150,22 @@ def pace(source, current_outputs):
         out.put(None)
 
 
-def write_receiver(out, fd, ready):
+def write_receiver(out, fd, ready, delay_seconds):
     """Write the header, then forward audio once the receiver is connected.
 
-    Audio queued before the connection is ready is discarded, so the receiver
-    starts with what is playing now rather than what was queued earlier."""
+    Each chunk is held back by the receiver's delay (`delay_seconds()`), which lines receivers up
+    when some play later than others. Audio queued before the connection is ready is discarded, so
+    the receiver starts with what is playing now rather than what was queued earlier."""
     try:
         write_all(fd, wav_header())
         while True:
-            chunk = out.get()
-            if chunk is None:
+            item = out.get()
+            if item is None:
                 break
+            queued_at, chunk = item
+            wait = queued_at + delay_seconds() - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
             if ready.is_set():
                 write_all(fd, chunk)
     except OSError:
@@ -244,6 +251,11 @@ class Hub:
         self.outputs = {}  # identifier -> the queue the pacer fills for it
         self.clients = {}  # identifier -> the connected pyatv device, while it is streaming
         self.wanted = {}  # identifier -> address, for every receiver the user has ticked
+        self.delays = {}  # identifier -> seconds each receiver is held back, to line receivers up
+
+    def set_delay(self, identifier, milliseconds):
+        """Hold a receiver back by `milliseconds`, from now on."""
+        self.delays[identifier] = max(0.0, min(5000.0, float(milliseconds))) / 1000
 
     def set_volume(self, identifier, level):
         """Set the volume of a streaming receiver, from 0 to 100."""
@@ -275,7 +287,11 @@ class Hub:
         reader = io.BufferedReader(io.FileIO(read_fd, "rb"))
         out = queue.Queue(maxsize=RECEIVER_QUEUE_TICKS)
         ready = threading.Event()
-        threading.Thread(target=write_receiver, args=(out, write_fd, ready), daemon=True).start()
+        threading.Thread(
+            target=write_receiver,
+            args=(out, write_fd, ready, lambda: self.delays.get(identifier, 0.0)),
+            daemon=True,
+        ).start()
         with self.lock:
             self.outputs[identifier] = out
         # A receiver added later does not wait for the others: the start gate is already open.
@@ -312,6 +328,11 @@ def serve_control(path, hub):
                 parts = line.split()
                 if len(parts) == 3 and parts[0] == "add":
                     hub.add(parts[1], parts[2])
+                elif len(parts) == 3 and parts[0] == "delay":
+                    try:
+                        hub.set_delay(parts[1], parts[2])
+                    except ValueError:
+                        pass
                 elif len(parts) == 3 and parts[0] == "volume":
                     try:
                         hub.set_volume(parts[1], parts[2])
@@ -383,7 +404,119 @@ def cmd_scan():
     print(json.dumps(asyncio.run(scan_receivers())), flush=True)
 
 
+# Calibration: an irregular click track, so each click can be matched to its place in the track.
+CLICK_SEED = 7
+CLICK_TRACK_SECONDS = 40
+CLICK_RATE = 48000
+CLICK_LENGTH = 0.005
+CLICK_FREQUENCY = 1000.0
+
+
+def click_times():
+    """The start of every click in the calibration track, in seconds. The same every time."""
+    import random
+
+    rng = random.Random(CLICK_SEED)
+    times, t = [0.5], 0.5
+    while True:
+        t += rng.uniform(0.3, 0.8)
+        if t > CLICK_TRACK_SECONDS - 1:
+            return times
+        times.append(t)
+
+
+def write_click_track(path):
+    """Write the calibration track as a 16-bit mono WAV."""
+    import math
+
+    samples = bytearray(CLICK_RATE * CLICK_TRACK_SECONDS * 2)
+    n_click = int(CLICK_LENGTH * CLICK_RATE)
+    for t in click_times():
+        start = int(t * CLICK_RATE)
+        for i in range(n_click):
+            phase = i / CLICK_RATE
+            value = 0.8 * math.sin(2 * math.pi * CLICK_FREQUENCY * phase) * (1 - phase / CLICK_LENGTH)
+            struct.pack_into("<h", samples, 2 * (start + i), int(value * 32767))
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(CLICK_RATE)
+        w.writeframes(bytes(samples))
+
+
+def click_onsets(path):
+    """The times, in seconds, where clear clicks start in a recording."""
+    import bisect  # noqa: F401  (used by callers)
+
+    with wave.open(path, "rb") as w:
+        rate = w.getframerate()
+        data = w.readframes(w.getnframes())
+    samples = array.array("h")
+    samples.frombytes(data[: len(data) // 2 * 2])
+    if sys.byteorder == "big":
+        samples.byteswap()
+    # Peak level in each millisecond, then a threshold well above the room's noise.
+    step = max(1, rate // 1000)
+    peaks = [max(abs(x) for x in samples[i:i + step]) for i in range(0, len(samples), step)]
+    ordered = sorted(peaks)
+    noise = ordered[len(ordered) // 2] if ordered else 0
+    threshold = max(60, 5 * noise)
+    onsets, last = [], -1.0
+    above = False
+    for i, value in enumerate(peaks):
+        if value > threshold and not above:
+            t = i / 1000
+            if t - last > 0.02:
+                onsets.append(t)
+                last = t
+            above = True
+        elif value <= threshold:
+            above = False
+    return onsets
+
+
+def find_lag(recording, clicks):
+    """How late the clicks in `recording` are, against the calibration track, in milliseconds."""
+    import bisect
+
+    onsets = click_onsets(recording)
+    if not onsets:
+        raise RuntimeError("no clicks heard: turn the receiver up, or move it closer to the Mac")
+    expected = click_times()
+    best_lag, best_count = 0.0, 0
+    # Try every whole millisecond of lag from 0 to 10 seconds.
+    for lag_ms in range(0, 10001):
+        lag = lag_ms / 1000
+        count = 0
+        for t in expected:
+            i = bisect.bisect_left(onsets, t + lag - 0.01)
+            if i < len(onsets) and onsets[i] <= t + lag + 0.01:
+                count += 1
+        if count > best_count:
+            best_lag, best_count = lag_ms, count
+    if best_count < max(3, len(expected) // 4):
+        raise RuntimeError("the clicks were too faint to measure: turn the receiver up, or move it closer")
+    # Refine: the median offset of the clicks that matched at that lag.
+    offsets = []
+    for t in expected:
+        i = bisect.bisect_left(onsets, t + best_lag / 1000 - 0.01)
+        if i < len(onsets) and onsets[i] <= t + best_lag / 1000 + 0.01:
+            offsets.append(onsets[i] - t)
+    offsets.sort()
+    return {"lag_ms": round(offsets[len(offsets) // 2] * 1000, 1), "matched": best_count, "clicks": len(expected)}
+
+
 def main(argv):
+    if len(argv) >= 3 and argv[1] == "clicks":
+        write_click_track(argv[2])
+        return 0
+    if len(argv) >= 4 and argv[1] == "lag":
+        try:
+            print(json.dumps(find_lag(argv[2], argv[3])), flush=True)
+            return 0
+        except RuntimeError as error:
+            print(json.dumps({"error": str(error)}), flush=True)
+            return 1
     if len(argv) >= 2 and argv[1] == "scan":
         cmd_scan()
     elif len(argv) >= 3 and argv[1] == "stream":

@@ -431,3 +431,59 @@ listen("popover-opened", async () => {
   await refresh();
 });
 refresh();
+
+
+// Sync calibration: a sheet explains the method and asks before the microphone is used.
+const sheet = document.getElementById("calibrate-sheet");
+const calibrateIntro = document.getElementById("calibrate-intro");
+const calibrateProgress = document.getElementById("calibrate-progress");
+const calibrateStep = document.getElementById("calibrate-step");
+const calibrateResults = document.getElementById("calibrate-results");
+const calibrateMessage = document.getElementById("calibrate-message");
+const calibrateStop = document.getElementById("calibrate-stop");
+const calibrateClose = document.getElementById("calibrate-close");
+
+function showCalibrationIntro(error) {
+  sheet.hidden = false;
+  calibrateIntro.hidden = false;
+  calibrateProgress.hidden = true;
+  calibrateMessage.hidden = !error;
+  calibrateMessage.textContent = error ?? "";
+}
+
+function showCalibrationProgress(progress) {
+  sheet.hidden = false;
+  calibrateIntro.hidden = true;
+  calibrateProgress.hidden = false;
+  calibrateStep.textContent = progress.step;
+  calibrateResults.replaceChildren(
+    ...progress.results.map((m) => {
+      const item = document.createElement("li");
+      item.textContent = `${m.name}: plays ${m.lagMs.toFixed(0)} ms late, delayed by ${m.delayMs.toFixed(0)} ms`;
+      return item;
+    }),
+  );
+  const finished = progress.state !== "running";
+  calibrateStop.hidden = finished;
+  calibrateClose.hidden = !finished;
+  calibrateMessage.hidden = !progress.message;
+  calibrateMessage.textContent = progress.message;
+}
+
+document.getElementById("calibrate").addEventListener("click", () => showCalibrationIntro());
+document.getElementById("calibrate-cancel").addEventListener("click", () => {
+  sheet.hidden = true;
+});
+document.getElementById("calibrate-allow").addEventListener("click", async () => {
+  try {
+    await invoke("start_calibration");
+    showCalibrationProgress({ state: "running", step: "Starting…", results: [], message: "" });
+  } catch (err) {
+    showCalibrationIntro(String(err));
+  }
+});
+calibrateStop.addEventListener("click", () => invoke("cancel_calibration"));
+calibrateClose.addEventListener("click", () => {
+  sheet.hidden = true;
+});
+listen("calibration", (event) => showCalibrationProgress(event.payload));

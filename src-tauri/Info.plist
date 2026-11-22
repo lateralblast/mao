@@ -4,6 +4,8 @@
 <dict>
   <key>LSUIElement</key>
   <true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>mao listens to the room, with your permission, to measure how far apart the AirPlay receivers play. It does not keep the recording.</string>
   <key>NSAudioCaptureUsageDescription</key>
   <string>mao copies the audio your Mac plays to the AirPlay receivers you choose. It does not record or store audio.</string>
 </dict>

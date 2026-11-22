@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.8.6
+Version: 0.8.7
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -74,6 +74,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 - A streaming AirPlay receiver has a volume slider under its name, with a mute button at its left. Muting sets that receiver's own volume to zero, and unmuting restores the level it had. It does not change the Mac's volume.
 - An output on this Mac has the same volume slider and mute button. They change that output's own volume. While that output is the Mac's system output, this is the Mac's volume.
 - At launch, the output on this Mac that the Mac is currently using is ticked, so the popover matches what the Mac plays through.
+- **Calibrate sync** (above Quit) lines up the AirPlay receivers. A sheet explains the method first. It needs your OK, because it uses the Mac's microphone. Then mao plays a click track through each receiver in turn, with the others muted, and records it for about 45 seconds per receiver. It sets a delay for each receiver from what it hears, and deletes the recording once measured. It needs at least two AirPlay receivers streaming, and no output on this Mac ticked. Keep the room quiet while it runs.
 - Quit mao with the button at the bottom of the popover.
 
 ## How it works
@@ -87,7 +88,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 ## Limitations
 
 - **One output on this Mac at a time.** The Mac has one system output, so mao can't play on two outputs on this Mac at once. AirPlay receivers can be combined with it.
-- **Receivers drift apart.** They start together, but each has its own playback buffer. A measurement found Kitchen about 0.15 seconds behind Front Bedroom. mao doesn't correct this yet.
+- **Receivers drift apart.** They start together, but each has its own playback buffer. Calibrate sync measures each receiver's offset and delays it to match. The delays are set once, so they don't follow drift over a long session; run calibration again if the receivers fall out of step.
 - **A dropped receiver is retried every 10 seconds** while it is ticked. If it stays away, it shows an error until it returns or you untick it.
 - **AirPlay receivers are not remembered by default.** Turn on *Remember AirPlay receivers* in the info view to keep them. Without it, tick them once they have been found.
 - **Volume and mute need a streaming receiver.** An AirPlay receiver's slider appears only while it is streaming. An output on this Mac needs a device that has a volume or mute control, and otherwise has no slider.

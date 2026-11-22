@@ -6,8 +6,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 - [ ] Measure sync between receivers. Measured: Kitchen plays about 0.15 s after Front Bedroom (single-receiver runs, 4.48 s vs 4.33 s delay; the pair run gave 0.17 s). Kitchen's match was weaker, so treat 0.15 s as an estimate. To fix: add a per-receiver delay in the streamer (hold Front Bedroom back about 150 ms), then measure again. Method: irregular click track, recorded with the AVAudioEngine recorder (ffmpeg dropped samples), cross-correlated against the known click times.
 - [ ] Check the audio-capture permission flow on a clean account, and what happens if the user denies it.
-- [ ] Per-receiver delay: hold each receiver back by its own amount, so receivers line up. Fixes the measured offset (Kitchen about 0.15 s behind Front Bedroom).
-- [ ] Built-in sync check: a popover button that runs the click-track measurement and shows the result.
+- [~] Per-receiver delay (built in 0.8.7, not yet verified on receivers): hold each receiver back by its own amount, so receivers line up. Fixes the measured offset (Kitchen about 0.15 s behind Front Bedroom).
+- [~] Built-in sync check (built in 0.8.7, not yet run on receivers): the Calibrate sync button in the popover.
 - [ ] Presets: save a set of receivers and outputs, and switch between them.
 - [ ] Several outputs on this Mac at once. The Mac has one system output, so this needs a different approach, such as an aggregate device, and it brings back the clock problems seen earlier.
 - [ ] Volume that follows the Mac's volume keys. May not be possible through pyatv.

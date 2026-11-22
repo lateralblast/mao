@@ -29,6 +29,7 @@
       <p class="hint">Audio plays only on the receivers and outputs you tick.</p>
 
       <footer>
+        <button id="calibrate" type="button">Calibrate sync</button>
         <button id="quit" type="button">Quit mao</button>
       </footer>
     </div>
@@ -53,6 +54,30 @@
       <div id="attribution" class="help"></div>
       <p class="hint">Click anywhere to go back.</p>
     </section>
+
+    <div id="calibrate-sheet" class="sheet" hidden>
+      <div class="sheet-body">
+        <h2>Calibrate sync</h2>
+        <div id="calibrate-intro">
+          <p>This lines up the AirPlay receivers so they play together.</p>
+          <p>mao plays a short click track through each receiver in turn, with the others muted. Your Mac's microphone listens to the room while this happens, for about 45 seconds per receiver, to hear when each one plays. The recording is deleted once it has been measured.</p>
+          <p>It needs at least two AirPlay receivers streaming, and no output on this Mac ticked. Keep the room quiet while it runs.</p>
+          <div class="sheet-actions">
+            <button id="calibrate-cancel" type="button">Not now</button>
+            <button id="calibrate-allow" type="button" class="primary">Allow microphone and start</button>
+          </div>
+        </div>
+        <div id="calibrate-progress" hidden>
+          <p id="calibrate-step" class="step"></p>
+          <ul id="calibrate-results" class="results"></ul>
+          <p id="calibrate-message" class="error" hidden></p>
+          <div class="sheet-actions">
+            <button id="calibrate-stop" type="button">Cancel calibration</button>
+            <button id="calibrate-close" type="button" class="primary" hidden>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script src="main.js"></script>
   </body>

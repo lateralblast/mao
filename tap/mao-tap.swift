@@ -5,9 +5,11 @@
 //   mao-tap devices         print this Mac's output devices as JSON
 //   mao-tap output          print the system output device's UID
 //   mao-tap set-output UID  make the output device UID the system output
+//   mao-tap record SECONDS PATH  record the microphone to a WAV file (for sync calibration)
 //
 // Capture runs until stdin closes (mao has exited) or it gets SIGTERM, and then removes what it created.
 
+import AVFoundation
 import CoreAudio
 import Foundation
 
@@ -331,6 +333,42 @@ func runSetMute(uid: String, muted: Bool) -> Never {
     exit(0)
 }
 
+// MARK: - Mode: record the microphone
+
+/// Records the default microphone for `seconds` into a 16-bit mono WAV at `path`, and exits.
+/// The file is closed before exit, so its header is complete.
+func runRecord(seconds: Double, path: String) -> Never {
+    func record() throws {
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        var file: AVAudioFile? = try AVAudioFile(forWriting: URL(fileURLWithPath: path), settings: settings,
+                                                 commonFormat: .pcmFormatFloat32, interleaved: false)
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
+            do { try file?.write(from: buffer) } catch { fputs("mao-tap: write failed\n", stderr) }
+        }
+        try engine.start()
+        Thread.sleep(forTimeInterval: seconds)
+        input.removeTap(onBus: 0)
+        engine.stop()
+        file = nil  // closing the file writes its header
+    }
+    do {
+        try record()
+    } catch {
+        fail("could not record the microphone: \(error.localizedDescription)")
+    }
+    exit(0)
+}
+
 // MARK: - Entry point
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -346,6 +384,9 @@ case "set-volume":
 case "set-mute":
     guard arguments.count >= 3 else { fail("set-mute needs a UID and 0 or 1") }
     runSetMute(uid: arguments[1], muted: arguments[2] == "1")
+case "record":
+    guard arguments.count >= 3, let seconds = Double(arguments[1]) else { fail("record needs SECONDS and PATH") }
+    runRecord(seconds: seconds, path: arguments[2])
 case "set-output":
     guard arguments.count >= 2 else { fail("set-output needs a device UID") }
     runSetOutput(uid: arguments[1])

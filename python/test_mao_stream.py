@@ -77,7 +77,7 @@ class PaceTests(unittest.TestCase):
             while not out.empty():
                 items.append(out.get_nowait())
             self.assertIsNone(items[-1])
-            self.assertTrue(all(len(i) == m.TICK_BYTES for i in items[:-1]))
+            self.assertTrue(all(len(i[1]) == m.TICK_BYTES for i in items[:-1]))
 
 
 if __name__ == "__main__":

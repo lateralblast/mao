@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-11-22
+
+### Added
+
+- A *Calibrate sync* button in the popover. It plays a click track through each AirPlay receiver in turn, with the others muted, records it with the Mac's microphone, and sets a per-receiver delay so the receivers line up. A sheet explains the method and asks before the microphone is used. The recording is deleted once measured.
+- The streamer can delay each receiver (`delay ID MS` on the control socket) and has `clicks` and `lag` subcommands for calibration.
+- `mao-tap record SECONDS PATH` records the Mac's microphone to a WAV file.
+- Microphone usage description in the app's Info.plist.
+
 ## [0.8.6] - 2026-11-22
 
 ### Fixed

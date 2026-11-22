@@ -33,6 +33,9 @@ struct Saved {
     /// Whether AirPlay receivers are remembered between launches. Off by default.
     #[serde(default)]
     remember_receivers: bool,
+    /// How many milliseconds each AirPlay receiver is held back, from calibration.
+    #[serde(default)]
+    delays: BTreeMap<String, f64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -104,6 +107,10 @@ struct Inner {
     streamer: Option<RunningStreamer>,
     /// Bumped on every streamer restart, so late output from an old streamer is ignored.
     generation: u64,
+    /// Set while a calibration runs, so a second one cannot start.
+    calibrating: bool,
+    /// Set by "Cancel", and checked between the steps of a calibration.
+    cancel: Arc<std::sync::atomic::AtomicBool>,
     /// At launch, with receivers remembered: they are not started until the search has found them.
     startup_pending: bool,
     error: Option<String>,
@@ -190,6 +197,62 @@ impl Controller {
         drop(inner);
         let _ = app.emit(STATUS_EVENT, status.clone());
         Ok(status)
+    }
+
+    /// The AirPlay receivers streaming now, for calibration. Errors say why it cannot start.
+    pub fn calibration_targets(&self) -> Result<Vec<Receiver>, String> {
+        let inner = self.lock();
+        if inner.calibrating {
+            return Err("a calibration is already running".into());
+        }
+        if inner.saved.selected.iter().any(|r| stream::is_local(&r.identifier)) {
+            return Err("untick the output on this Mac first: calibration plays through the receivers only".into());
+        }
+        let targets: Vec<Receiver> = inner
+            .saved
+            .selected
+            .iter()
+            .filter(|r| inner.links.get(&r.identifier).is_some_and(|l| l.state == "streaming"))
+            .cloned()
+            .collect();
+        if targets.len() < 2 {
+            return Err("calibration needs at least two AirPlay receivers streaming".into());
+        }
+        Ok(targets)
+    }
+
+    pub fn set_calibrating(&self, running: bool) -> Arc<std::sync::atomic::AtomicBool> {
+        let mut inner = self.lock();
+        inner.calibrating = running;
+        if running {
+            inner.cancel.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        inner.cancel.clone()
+    }
+
+    pub fn saved_delays(&self) -> BTreeMap<String, f64> {
+        self.lock().saved.delays.clone()
+    }
+
+    pub fn cancel_calibration(&self) {
+        self.lock().cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Whether this receiver is muted by mao right now.
+    pub fn is_muted(&self, identifier: &str) -> bool {
+        self.lock().muted.contains_key(identifier)
+    }
+
+    /// Saves the delays of the AirPlay receivers, and applies them to the running streamer.
+    pub fn apply_delays(&self, delays: BTreeMap<String, f64>) -> Result<(), String> {
+        let mut inner = self.lock();
+        inner.saved.delays = delays;
+        let saved = inner.saved.clone();
+        self.save(&saved)?;
+        if let Some(streamer) = inner.streamer.as_ref() {
+            apply_delays_to(streamer, &inner.saved.delays);
+        }
+        Ok(())
     }
 
     pub fn remember_receivers(&self) -> bool {
@@ -567,6 +630,9 @@ impl Controller {
                     if let Err(error) = streamer.add(receiver) {
                         failure = Some(error);
                     }
+                    if let Some(ms) = inner.saved.delays.get(&receiver.identifier) {
+                        let _ = streamer.set_delay(&receiver.identifier, *ms);
+                    }
                     inner.links.insert(
                         receiver.identifier.clone(),
                         Link {
@@ -601,7 +667,10 @@ impl Controller {
                     }
                     inner.volumes.clear();
                     match stream::start_streamer(&inner.feed, &runner, &airplay, on_line) {
-                        Ok(streamer) => inner.streamer = Some(streamer),
+                        Ok(streamer) => {
+                            apply_delays_to(&streamer, &inner.saved.delays);
+                            inner.streamer = Some(streamer);
+                        }
                         Err(error) => inner.error = Some(error),
                     }
                 }
@@ -895,6 +964,14 @@ pub fn remap_local(saved: &mut [Receiver], available: &[Receiver]) -> bool {
     changed
 }
 
+/// Holds each receiver back by its saved delay (all receivers, so an unset one goes back to zero).
+fn apply_delays_to(streamer: &RunningStreamer, delays: &BTreeMap<String, f64>) {
+    for receiver in &streamer.receivers {
+        let ms = delays.get(&receiver.identifier).copied().unwrap_or(0.0);
+        let _ = streamer.set_delay(&receiver.identifier, ms);
+    }
+}
+
 /// What is kept between launches: the outputs on this Mac only. AirPlay receivers are not
 /// remembered, because they are only known once discovery has finished, and ticking one before
 /// then fails. At launch the Mac's current output decides the local selection.
@@ -967,6 +1044,7 @@ mod tests {
                 original_output: None,
                 notify_on_drop: false,
                 remember_receivers: false,
+                delays: BTreeMap::new(),
             },
             available: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("B", "Lounge", "10.0.0.2")],
             links: BTreeMap::from([(
@@ -1018,6 +1096,7 @@ mod tests {
             original_output: Some("BuiltInSpeakerDevice".into()),
             notify_on_drop: false,
             remember_receivers: false,
+            delays: BTreeMap::new(),
         };
         let kept = persistable(&saved);
         assert_eq!(kept.selected.len(), 1);
