@@ -5,6 +5,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-22
+
+### Added
+
+- A *Notify when a receiver drops* switch on the info view, under the login switch. Notifications are off by default.
+
+## [0.8.2] - 2026-11-22
+
+### Added
+
+- A macOS notification when a ticked receiver that was streaming is lost. It is sent once per drop, not on each retry.
+
 ## [0.8.1] - 2026-11-22
 
 ### Added

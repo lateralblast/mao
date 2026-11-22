@@ -10,7 +10,7 @@
 use crate::paths;
 use crate::stream::{self, Feed, Receiver, RunningStreamer, Tap};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -27,6 +27,9 @@ struct Saved {
     /// output is unticked, and when mao quits.
     #[serde(default)]
     original_output: Option<String>,
+    /// Whether to show a notification when a receiver is lost. Off by default.
+    #[serde(default)]
+    notify_on_drop: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -75,6 +78,8 @@ struct Inner {
     links: BTreeMap<String, Link>,
     /// The volume each streaming AirPlay receiver reports, 0 to 100.
     volumes: BTreeMap<String, f64>,
+    /// Receivers that have streamed since they were last lost (so a loss is announced once).
+    streamed: BTreeSet<String>,
     /// Receivers muted by mao, with the volume to restore when they are unmuted.
     muted: BTreeMap<String, f64>,
     /// Whether "mute all" is in effect, and the receivers and outputs it muted (so that
@@ -178,6 +183,17 @@ impl Controller {
         drop(inner);
         let _ = app.emit(STATUS_EVENT, status.clone());
         Ok(status)
+    }
+
+    pub fn notify_on_drop(&self) -> bool {
+        self.lock().saved.notify_on_drop
+    }
+
+    pub fn set_notify_on_drop(&self, enabled: bool) -> Result<(), String> {
+        let mut inner = self.lock();
+        inner.saved.notify_on_drop = enabled;
+        let saved = inner.saved.clone();
+        self.save(&saved)
     }
 
     /// Sets the volume of a streaming AirPlay receiver, 0 to 100.
@@ -628,10 +644,21 @@ impl Controller {
             return;
         };
         let message = value["message"].as_str().unwrap_or_default().to_string();
+        let mut lost_name = None;
         let status = {
             let mut inner = self.lock();
             if inner.generation != generation {
                 return;
+            }
+            // A receiver that was streaming and is now lost is announced once, as a notification.
+            if state == "streaming" {
+                inner.streamed.insert(identifier.to_string());
+            } else if state == "error"
+                && message.starts_with("lost")
+                && inner.streamed.remove(identifier)
+                && inner.saved.notify_on_drop
+            {
+                lost_name = inner.saved.selected.iter().find(|r| r.identifier == identifier).map(|r| r.name.clone());
             }
             inner.links.insert(
                 identifier.to_string(),
@@ -642,6 +669,9 @@ impl Controller {
             );
             build_status(&inner)
         };
+        if let Some(name) = lost_name {
+            notify_lost(app, &name);
+        }
         let _ = app.emit(STATUS_EVENT, status);
     }
 
@@ -716,6 +746,17 @@ fn read_local_levels_locked(inner: &mut Inner) {
             }
         }
     }
+}
+
+/// A macOS notification that a ticked receiver has dropped off the network.
+fn notify_lost(app: &AppHandle, name: &str) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app
+        .notification()
+        .builder()
+        .title("mao")
+        .body(format!("{name} dropped off the network. Trying again every 10 seconds."))
+        .show();
 }
 
 fn kind_of(identifier: &str) -> String {
@@ -883,6 +924,7 @@ mod tests {
             saved: Saved {
                 selected: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("C", "Study", "10.0.0.3")],
                 original_output: None,
+                notify_on_drop: false,
             },
             available: vec![receiver("A", "Kitchen", "10.0.0.1"), receiver("B", "Lounge", "10.0.0.2")],
             links: BTreeMap::from([(
@@ -932,6 +974,7 @@ mod tests {
                 receiver("local:BuiltInHeadphoneOutputDevice", "External Headphones", ""),
             ],
             original_output: Some("BuiltInSpeakerDevice".into()),
+            notify_on_drop: false,
         };
         let kept = persistable(&saved);
         assert_eq!(kept.selected.len(), 1);

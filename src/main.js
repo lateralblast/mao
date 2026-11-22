@@ -256,6 +256,7 @@ const infoView = document.getElementById("info-view");
 
 function showInfo(about) {
   refreshLoginItem();
+  refreshNotifications();
   document.getElementById("version").textContent = `Version ${about.version}`;
   document.getElementById("help-title").textContent = about.help_title;
   renderHelp(about.help);
@@ -286,6 +287,29 @@ const loginSetting = document.getElementById("login-setting");
 const loginToggle = document.getElementById("login-toggle");
 const loginNote = document.getElementById("login-note");
 loginSetting.addEventListener("click", (event) => event.stopPropagation());
+
+const notifySetting = document.getElementById("notify-setting");
+const notifyToggle = document.getElementById("notify-toggle");
+notifySetting.addEventListener("click", (event) => event.stopPropagation());
+
+async function refreshNotifications() {
+  try {
+    notifyToggle.checked = await invoke("get_notify_on_drop");
+  } catch (err) {
+    errorLine.hidden = false;
+    errorLine.textContent = String(err);
+  }
+}
+
+notifyToggle.addEventListener("change", async () => {
+  try {
+    notifyToggle.checked = await invoke("set_notify_on_drop", { enabled: notifyToggle.checked });
+  } catch (err) {
+    notifyToggle.checked = !notifyToggle.checked;
+    errorLine.hidden = false;
+    errorLine.textContent = String(err);
+  }
+});
 
 async function refreshLoginItem() {
   try {

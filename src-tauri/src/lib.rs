@@ -115,6 +115,17 @@ fn set_login_item(enabled: bool) -> Result<LoginItem, String> {
 }
 
 #[tauri::command]
+fn get_notify_on_drop(controller: State<Arc<Controller>>) -> bool {
+    controller.notify_on_drop()
+}
+
+#[tauri::command]
+fn set_notify_on_drop(enabled: bool, controller: State<Arc<Controller>>) -> Result<bool, String> {
+    controller.set_notify_on_drop(enabled)?;
+    Ok(controller.notify_on_drop())
+}
+
+#[tauri::command]
 fn quit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -262,7 +273,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute, toggle_mute_all])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute, toggle_mute_all, get_notify_on_drop, set_notify_on_drop])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {
@@ -289,6 +300,7 @@ pub fn run() {
                 })
                 .build(),
         )
+        .plugin(tauri_plugin_notification::init())
         .setup(setup)
         .build(tauri::generate_context!())
         .expect("failed to build mao")
