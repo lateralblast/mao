@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-11-22
+
+### Changed
+
+- The popover and error messages say *your Mac* where they said *this Mac*.
+- The README is tidied: it describes the volume keys and calibration, shows the info view, and lists every source file. It no longer says AirPlay receivers are forgotten without the remember switch being off.
+
 ## [0.9.2] - 2026-11-22
 
 ### Fixed

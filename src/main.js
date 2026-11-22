@@ -88,7 +88,7 @@ function renderRow(receiver) {
   if (receiver.kind === "local") {
     const place = document.createElement("span");
     place.className = "tag";
-    place.textContent = "this Mac";
+    place.textContent = "your Mac";
     label.append(place);
   }
 

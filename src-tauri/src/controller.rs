@@ -206,7 +206,7 @@ impl Controller {
             return Err("a calibration is already running".into());
         }
         if inner.saved.selected.iter().any(|r| stream::is_local(&r.identifier)) {
-            return Err("untick the output on this Mac first: calibration plays through the receivers only".into());
+            return Err("untick the output on your Mac first: calibration plays through the receivers only".into());
         }
         let targets: Vec<Receiver> = inner
             .saved
@@ -350,7 +350,7 @@ impl Controller {
 
     /// Sets the volume of a selected output on this Mac, 0 to 100.
     pub fn set_local_volume(self: &Arc<Self>, app: &AppHandle, identifier: &str, level: f64) -> Result<(), String> {
-        let uid = stream::local_uid(identifier).ok_or("not an output on this Mac")?.to_string();
+        let uid = stream::local_uid(identifier).ok_or("not an output on your Mac")?.to_string();
         let tap = paths::tap_binary().ok_or("the audio tap is missing from the app")?;
         let level = level.clamp(0.0, 100.0);
         stream::set_local_volume(&tap, &uid, level)?;
@@ -366,7 +366,7 @@ impl Controller {
 
     /// Mutes or unmutes a selected output on this Mac.
     pub fn set_local_mute(self: &Arc<Self>, app: &AppHandle, identifier: &str, muted: bool) -> Result<(), String> {
-        let uid = stream::local_uid(identifier).ok_or("not an output on this Mac")?.to_string();
+        let uid = stream::local_uid(identifier).ok_or("not an output on your Mac")?.to_string();
         let tap = paths::tap_binary().ok_or("the audio tap is missing from the app")?;
         stream::set_local_mute(&tap, &uid, muted)?;
         let status = {
