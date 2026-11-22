@@ -12,12 +12,14 @@ use std::time::{Duration, Instant};
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Rect, RunEvent, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Listener, Manager, PhysicalPosition, Rect, RunEvent, State, WindowEvent};
 
 const POPOVER: &str = "main";
 /// Mute or unmute everything: Option, Command and M.
 const MUTE_ALL_SHORTCUT: &str = "alt+super+m";
 const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
+/// The same icon with a dot, shown while any receiver is streaming.
+const TRAY_ICON_STREAMING: &[u8] = include_bytes!("../icons/tray-streaming.png");
 /// Clicking the tray icon while the popover is open first hides it (focus is lost),
 /// so ignore the reopen that would otherwise follow within this window.
 const REOPEN_GUARD: Duration = Duration::from_millis(250);
@@ -179,6 +181,24 @@ fn toggle_popover(app: &AppHandle, anchor: Rect) {
     let _ = app.emit("popover-opened", ());
 }
 
+/// Shows the dot on the menu bar icon while any receiver is streaming.
+fn update_tray_icon(app: &AppHandle, payload: &str) {
+    let Ok(status) = serde_json::from_str::<serde_json::Value>(payload) else {
+        return;
+    };
+    let streaming = status["receivers"]
+        .as_array()
+        .is_some_and(|list| list.iter().any(|r| r["state"] == "streaming"));
+    let Some(tray) = app.tray_by_id("mao") else {
+        return;
+    };
+    let bytes = if streaming { TRAY_ICON_STREAMING } else { TRAY_ICON };
+    if let Ok(icon) = Image::from_bytes(bytes) {
+        let _ = tray.set_icon(Some(icon));
+        let _ = tray.set_icon_as_template(true);
+    }
+}
+
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Menu bar only: no Dock icon.
     #[cfg(target_os = "macos")]
@@ -217,6 +237,10 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Resume the saved selection, and look for receivers on the network.
     let handle = app.handle().clone();
+    let tray_handle = handle.clone();
+    handle.listen(controller::STATUS_EVENT, move |event| {
+        update_tray_icon(&tray_handle, event.payload());
+    });
     controller.start_saved(&handle);
     controller.refresh_scan(&handle);
 
