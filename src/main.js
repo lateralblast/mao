@@ -27,7 +27,16 @@ function spinner() {
   return element;
 }
 
+function renderMuteAll(allMuted) {
+  const button = document.getElementById("mute-all");
+  button.replaceChildren(speakerIcon(allMuted));
+  button.setAttribute("aria-pressed", String(allMuted));
+  button.title = allMuted ? "Unmute all (Option+Command+M)" : "Mute all (Option+Command+M)";
+  button.setAttribute("aria-label", button.title);
+}
+
 function render(status) {
+  renderMuteAll(status.allMuted);
   if (dragging) {
     pendingStatus = status;
     return;
@@ -233,6 +242,14 @@ async function refresh() {
 }
 
 document.getElementById("quit").addEventListener("click", () => invoke("quit_app"));
+document.getElementById("mute-all").addEventListener("click", async () => {
+  try {
+    await invoke("toggle_mute_all");
+  } catch (err) {
+    errorLine.hidden = false;
+    errorLine.textContent = String(err);
+  }
+});
 
 const mainView = document.getElementById("main-view");
 const infoView = document.getElementById("info-view");

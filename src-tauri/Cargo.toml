@@ -1,6 +1,6 @@
 [package]
 name = "mao"
-version = "0.7.4"
+version = "0.8.0"
 description = "Multi AirPlay Output: send system audio to several AirPlay receivers at once"
 license = "Apache-2.0"
 edition = "2021"
@@ -21,4 +21,5 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tauri-plugin-global-shortcut = "2"
 

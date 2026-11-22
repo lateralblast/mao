@@ -15,6 +15,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Rect, RunEvent, State, WindowEvent};
 
 const POPOVER: &str = "main";
+/// Mute or unmute everything: Option, Command and M.
+const MUTE_ALL_SHORTCUT: &str = "alt+super+m";
 const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
 /// Clicking the tray icon while the popover is open first hides it (focus is lost),
 /// so ignore the reopen that would otherwise follow within this window.
@@ -136,6 +138,11 @@ fn set_local_mute(identifier: String, muted: bool, app: AppHandle, controller: S
 }
 
 #[tauri::command]
+fn toggle_mute_all(app: AppHandle, controller: State<Arc<Controller>>) -> Result<bool, String> {
+    controller.toggle_mute_all(&app)
+}
+
+#[tauri::command]
 fn refresh_receivers(app: AppHandle, controller: State<Arc<Controller>>) {
     controller.refresh_scan(&app);
 }
@@ -231,7 +238,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .manage(Popover::default())
-        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute])
+        .invoke_handler(tauri::generate_handler![get_status, set_selected, refresh_receivers, quit_app, about, open_url, login_item, set_login_item, set_volume, set_mute, set_local_volume, set_local_mute, toggle_mute_all])
         .on_window_event(|window, event| {
             // The popover behaves like a menu: clicking elsewhere dismisses it.
             if let WindowEvent::Focused(false) = event {
@@ -243,6 +250,21 @@ pub fn run() {
                 }
             }
         })
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcut(MUTE_ALL_SHORTCUT)
+                .expect("the mute-all shortcut is valid")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let controller: Arc<Controller> = app.state::<Arc<Controller>>().inner().clone();
+                        let app = app.clone();
+                        std::thread::spawn(move || {
+                            let _ = controller.toggle_mute_all(&app);
+                        });
+                    }
+                })
+                .build(),
+        )
         .setup(setup)
         .build(tauri::generate_context!())
         .expect("failed to build mao")

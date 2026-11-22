@@ -60,6 +60,8 @@ pub struct Status {
     pub active: bool,
     pub scanning: bool,
     pub error: Option<String>,
+    /// Whether "mute all" is in effect.
+    pub all_muted: bool,
 }
 
 #[derive(Default)]
@@ -75,6 +77,10 @@ struct Inner {
     volumes: BTreeMap<String, f64>,
     /// Receivers muted by mao, with the volume to restore when they are unmuted.
     muted: BTreeMap<String, f64>,
+    /// Whether "mute all" is in effect, and the receivers and outputs it muted (so that
+    /// unmuting all restores only those, and leaves any muted by hand alone).
+    all_muted: bool,
+    mute_all_set: Vec<String>,
     /// The volume (0 to 100) and mute state of each selected output on this Mac.
     local_levels: BTreeMap<String, (f64, bool)>,
     /// Where the captured audio goes: the streamer's stdin. Kept here, so the tap can be restarted
@@ -232,6 +238,73 @@ impl Controller {
         };
         let _ = app.emit(STATUS_EVENT, status);
         Ok(())
+    }
+
+    /// Mutes everything that is streaming, or unmutes what "mute all" muted. Returns the new state.
+    pub fn toggle_mute_all(self: &Arc<Self>, app: &AppHandle) -> Result<bool, String> {
+        let muted = !self.lock().all_muted;
+        self.set_mute_all(app, muted)?;
+        Ok(muted)
+    }
+
+    pub fn set_mute_all(self: &Arc<Self>, app: &AppHandle, muted: bool) -> Result<(), String> {
+        // Work out what to change, then make the changes without holding the lock.
+        let (airplay, local, restore) = {
+            let mut inner = self.lock();
+            let streaming: Vec<String> = inner
+                .saved
+                .selected
+                .iter()
+                .filter(|r| inner.links.get(&r.identifier).is_some_and(|l| l.state == "streaming"))
+                .map(|r| r.identifier.clone())
+                .collect();
+            let (local, airplay): (Vec<String>, Vec<String>) = streaming.into_iter().partition(|id| stream::is_local(id));
+            let restore = std::mem::take(&mut inner.mute_all_set);
+            let airplay_to_mute: Vec<String> = airplay.iter().filter(|id| !inner.muted.contains_key(*id)).cloned().collect();
+            let local_to_mute: Vec<String> = local
+                .iter()
+                .filter(|id| !inner.local_levels.get(*id).is_some_and(|(_, m)| *m))
+                .cloned()
+                .collect();
+            if muted {
+                (airplay_to_mute, local_to_mute, Vec::new())
+            } else {
+                (Vec::new(), Vec::new(), restore)
+            }
+        };
+
+        let mut first_error = None;
+        let mut done = Vec::new();
+        for identifier in airplay {
+            match self.set_mute(app, &identifier, true) {
+                Ok(()) => done.push(identifier),
+                Err(error) => first_error = first_error.or(Some(error)),
+            }
+        }
+        for identifier in local {
+            match self.set_local_mute(app, &identifier, true) {
+                Ok(()) => done.push(identifier),
+                Err(error) => first_error = first_error.or(Some(error)),
+            }
+        }
+        for identifier in restore {
+            let result = if stream::is_local(&identifier) {
+                self.set_local_mute(app, &identifier, false)
+            } else {
+                self.set_mute(app, &identifier, false)
+            };
+            if let Err(error) = result {
+                first_error = first_error.or(Some(error));
+            }
+        }
+
+        {
+            let mut inner = self.lock();
+            inner.all_muted = muted;
+            inner.mute_all_set = if muted { done } else { Vec::new() };
+        }
+        let _ = app.emit(STATUS_EVENT, self.status());
+        first_error.map_or(Ok(()), Err)
     }
 
     /// Looks for receivers on the network in the background.
@@ -697,6 +770,7 @@ fn build_status(inner: &Inner) -> Status {
 
     Status {
         receivers,
+        all_muted: inner.all_muted,
         active: inner.streamer.is_some() || inner.saved.selected.iter().any(|r| stream::is_local(&r.identifier)),
         scanning: inner.scanning,
         error: inner.error.clone(),

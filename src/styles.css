@@ -362,3 +362,10 @@ footer {
 .receivers .volume {
   padding-right: 18px;
 }
+
+.info-button.mute-all svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  margin: 0 auto;
+}

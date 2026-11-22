@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-22
+
+### Added
+
+- Mute all: a button in the popover header, and the shortcut Option+Command+M, mute everything that is streaming. Pressing it again restores what it muted, and leaves anything muted by hand alone.
+
 ## [0.7.4] - 2026-11-22
 
 ### Fixed
