@@ -7,13 +7,14 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [ ] Measure sync between receivers. Measured: Kitchen plays about 0.15 s after Front Bedroom (single-receiver runs, 4.48 s vs 4.33 s delay; the pair run gave 0.17 s). Kitchen's match was weaker, so treat 0.15 s as an estimate. To fix: add a per-receiver delay in the streamer (hold Front Bedroom back about 150 ms), then measure again. Method: irregular click track, recorded with the AVAudioEngine recorder (ffmpeg dropped samples), cross-correlated against the known click times.
 - [ ] Check the audio-capture permission flow on a clean account, and what happens if the user denies it.
 - [~] Per-receiver delay (built in 0.8.7, not yet verified on receivers): hold each receiver back by its own amount, so receivers line up. Fixes the measured offset (Kitchen about 0.15 s behind Front Bedroom).
-- [~] Built-in sync check (built in 0.8.7, not yet run on receivers): the Calibrate sync button in the popover.
+- [~] Built-in sync check (built in 0.8.7, not yet run on receivers): the Calibrate sync button in the info view.
 - [ ] Presets: save a set of receivers and outputs, and switch between them.
 - [ ] Several outputs on this Mac at once. The Mac has one system output, so this needs a different approach, such as an aggregate device, and it brings back the clock problems seen earlier.
-- [ ] Volume that follows the Mac's volume keys. May not be possible through pyatv.
+
 
 ## Done
 
+- [x] Volume that follows the Mac's volume keys: AirPlay receivers scale with the Mac's output volume (0.9.1).
 - [x] Remember AirPlay receivers (0.8.5): an info-view switch, off by default, that starts remembered receivers once the launch search has found them.
 - [x] Notify when a ticked receiver is lost (0.8.2): one macOS notification per drop.
 - [x] Tray icon state (0.8.1): a dot on the menu bar icon while anything is streaming.

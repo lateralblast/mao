@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.9.0
+Version: 0.9.2
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -75,6 +75,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 - An output on this Mac has the same volume slider and mute button. They change that output's own volume. While that output is the Mac's system output, this is the Mac's volume.
 - At launch, the output on this Mac that the Mac is currently using is ticked, so the popover matches what the Mac plays through.
 - **Calibrate sync** (in the info view, opened with the info button in the popover header) lines up the AirPlay receivers. A sheet explains the method first. It needs your OK, because it uses the Mac's microphone. Then mao plays a click track through each receiver in turn, with the others muted, and records it for about 45 seconds per receiver. It sets a delay for each receiver from what it hears, and deletes the recording once measured. It needs at least two AirPlay receivers streaming, and no output on this Mac ticked. Keep the room quiet while it runs.
+- **Volume keys:** when the Mac's volume changes (the volume keys or the Sound menu), every streaming AirPlay receiver is scaled by the same ratio, so the receivers move together and keep their levels relative to each other.
 - Quit mao with the button at the bottom of the popover.
 
 ## How it works
@@ -92,6 +93,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 - **A dropped receiver is retried every 10 seconds** while it is ticked. If it stays away, it shows an error until it returns or you untick it.
 - **AirPlay receivers are not remembered by default.** Turn on *Remember AirPlay receivers* in the info view to keep them. Without it, tick them once they have been found.
 - **Volume and mute need a streaming receiver.** An AirPlay receiver's slider appears only while it is streaming. An output on this Mac needs a device that has a volume or mute control, and otherwise has no slider.
+- **The Mac's volume is followed only while the output on this Mac is not muted by mao.** When nothing is ticked on this Mac, mao mutes the built-in output, so the volume keys don't scale the receivers then.
 - **An output on this Mac is the Mac's volume.** While it is the system output, its slider changes the Mac's volume.
 - **Ticking or unticking an output on this Mac restarts the capture.** This can cause a short gap in AirPlay audio.
 - **The Mac's output is muted unless an output on this Mac is ticked.** Quit mao to get normal playback back.

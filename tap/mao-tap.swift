@@ -255,6 +255,79 @@ func runSetOutput(uid: String) -> Never {
     exit(0)
 }
 
+// MARK: - Follow the Mac's output volume
+
+/// Prints "level <0-100> muted <0|1>" whenever the system output's volume or mute changes, until
+/// stdin closes. The app scales its AirPlay receivers by the same ratio.
+final class VolumeFollower {
+    var device: AudioObjectID = 0
+    var blocks: [AudioObjectPropertyListenerBlock] = []
+    var lastLine = ""
+
+    func currentSystemOutput() -> AudioObjectID {
+        var addr = address(kAudioHardwarePropertyDefaultSystemOutputDevice)
+        var dev = AudioObjectID(0)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &dev)
+        return dev
+    }
+
+    func report() {
+        guard device != 0, let level = outputLevel(device) else { return }
+        let muted = outputMuted(device) ?? false
+        let line = String(format: "level %.4f muted %d", level, muted ? 1 : 0)
+        guard line != lastLine else { return }
+        lastLine = line
+        print(line)
+        fflush(stdout)
+    }
+
+    func moveTo(_ dev: AudioObjectID) {
+        guard dev != 0, dev != device else { return }
+        device = dev
+        lastLine = ""
+        for element in 0...2 {
+            var volAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+                                                     mScope: kAudioDevicePropertyScopeOutput, mElement: UInt32(element))
+            if AudioObjectHasProperty(dev, &volAddr) {
+                let block: AudioObjectPropertyListenerBlock = { _, _ in
+                    guard dev == self.device else { return }
+                    self.report()
+                }
+                blocks.append(block)
+                AudioObjectAddPropertyListenerBlock(dev, &volAddr, DispatchQueue.main, block)
+            }
+        }
+        var muteAddr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                                                  mScope: kAudioDevicePropertyScopeOutput, mElement: 0)
+        if AudioObjectHasProperty(dev, &muteAddr) {
+            let block: AudioObjectPropertyListenerBlock = { _, _ in
+                guard dev == self.device else { return }
+                self.report()
+            }
+            blocks.append(block)
+            AudioObjectAddPropertyListenerBlock(dev, &muteAddr, DispatchQueue.main, block)
+        }
+        report()
+    }
+}
+
+func runFollowVolume() -> Never {
+    let follower = VolumeFollower()
+    var addr = address(kAudioHardwarePropertyDefaultSystemOutputDevice)
+    AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, DispatchQueue.main) { _, _ in
+        follower.moveTo(follower.currentSystemOutput())
+    }
+    follower.moveTo(follower.currentSystemOutput())
+    // The app holds stdin open for as long as it wants the levels. Closing it ends the helper.
+    DispatchQueue.global().async {
+        while readLine() != nil {}
+        exit(0)
+    }
+    RunLoop.main.run()
+    exit(0)
+}
+
 // MARK: - Volume and mute of an output device
 
 /// The device's output volume scalar on `element`, or nil if it has none there.
@@ -387,6 +460,7 @@ case "set-mute":
 case "record":
     guard arguments.count >= 3, let seconds = Double(arguments[1]) else { fail("record needs SECONDS and PATH") }
     runRecord(seconds: seconds, path: arguments[2])
+case "follow-volume": runFollowVolume()
 case "set-output":
     guard arguments.count >= 2 else { fail("set-output needs a device UID") }
     runSetOutput(uid: arguments[1])

@@ -3,6 +3,7 @@
 mod calibrate;
 mod controller;
 mod devices;
+mod volume_follow;
 mod login;
 mod paths;
 mod stream;
@@ -276,6 +277,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
     controller.start_saved(&handle);
     controller.refresh_scan(&handle);
+
+    // Scale the AirPlay receivers with the Mac's volume keys and Sound menu.
+    if let Err(error) = volume_follow::start(Arc::clone(&controller), handle.clone()) {
+        eprintln!("mao: {error}");
+    }
 
     // Re-read this Mac's outputs whenever one is plugged in or removed.
     let watched = Arc::clone(&controller);

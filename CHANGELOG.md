@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-22
+
+### Fixed
+
+- The output on this Mac follows the Mac's volume keys too: its slider now moves with the Mac's volume, as the AirPlay receivers already did.
+
+## [0.9.1] - 2026-11-22
+
+### Added
+
+- AirPlay receivers follow the Mac's volume. When the volume keys or the Sound menu change the Mac's output volume, every streaming AirPlay receiver is scaled by the same ratio, so they move together and keep their levels relative to each other.
+- `mao-tap follow-volume` prints the system output's level and mute state whenever they change.
+
 ## [0.9.0] - 2026-11-22
 
 ### Changed

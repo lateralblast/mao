@@ -287,6 +287,48 @@ impl Controller {
         Ok(())
     }
 
+    /// The Mac's output volume changed to `percent` (0 to 100). The ticked output on this Mac shows
+    /// that level, and, when there is a `ratio` to scale by, every streaming AirPlay receiver that
+    /// mao has not muted moves by it. Levels are recorded at once, so the next change scales from
+    /// the right values.
+    pub fn mac_volume_changed(self: &Arc<Self>, app: &AppHandle, percent: f64, ratio: Option<f64>) {
+        let mut inner = self.lock();
+        let locals: Vec<String> = inner
+            .saved
+            .selected
+            .iter()
+            .filter(|r| stream::is_local(&r.identifier))
+            .map(|r| r.identifier.clone())
+            .collect();
+        let mut changed = false;
+        for identifier in locals {
+            let muted = inner.local_levels.get(&identifier).is_some_and(|(_, m)| *m);
+            inner.local_levels.insert(identifier, (percent, muted));
+            changed = true;
+        }
+        if let Some(ratio) = ratio.filter(|r| (r - 1.0).abs() > 1e-9) {
+            let targets: Vec<(String, f64)> = inner
+                .volumes
+                .iter()
+                .filter(|(identifier, _)| !inner.muted.contains_key(*identifier))
+                .map(|(identifier, level)| (identifier.clone(), crate::volume_follow::scaled(*level, ratio)))
+                .collect();
+            if let Some(streamer) = inner.streamer.as_ref() {
+                for (identifier, level) in &targets {
+                    let _ = streamer.set_volume(identifier, *level);
+                }
+            }
+            for (identifier, level) in targets {
+                inner.volumes.insert(identifier, level);
+                changed = true;
+            }
+        }
+        drop(inner);
+        if changed {
+            let _ = app.emit(STATUS_EVENT, self.status());
+        }
+    }
+
     /// Mutes or unmutes a streaming AirPlay receiver. Muting keeps its volume to restore later.
     pub fn set_mute(self: &Arc<Self>, app: &AppHandle, identifier: &str, muted: bool) -> Result<(), String> {
         let mut guard = self.lock();
