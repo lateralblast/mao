@@ -253,6 +253,7 @@ document.getElementById("mute-all").addEventListener("click", async () => {
 
 const mainView = document.getElementById("main-view");
 const infoView = document.getElementById("info-view");
+const infoFooter = document.getElementById("info-footer");
 
 function showInfo(about) {
   refreshLoginItem();
@@ -264,10 +265,12 @@ function showInfo(about) {
   renderBlock("attribution", about.attribution);
   mainView.hidden = true;
   infoView.hidden = false;
+  infoFooter.hidden = false;
 }
 
 function showMain() {
   infoView.hidden = true;
+  infoFooter.hidden = true;
   mainView.hidden = false;
 }
 
@@ -470,11 +473,7 @@ function showCalibrationProgress(progress) {
   calibrateMessage.textContent = progress.message;
 }
 
-document.getElementById("calibrate").addEventListener("click", (event) => {
-  // The info view closes on any click, so keep this one from reaching it.
-  event.stopPropagation();
-  showCalibrationIntro();
-});
+document.getElementById("calibrate").addEventListener("click", () => showCalibrationIntro());
 document.getElementById("calibrate-cancel").addEventListener("click", () => {
   sheet.hidden = true;
 });

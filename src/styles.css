@@ -436,6 +436,15 @@ footer {
   color: #fff;
 }
 
+.info-footer {
+  flex: none;
+  padding-top: 2px;
+}
+
+.info-footer .hint {
+  margin: 6px 0 0;
+}
+
 #calibrate {
   width: 100%;
   padding: 6px 0;

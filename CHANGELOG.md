@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-22
+
+### Changed
+
+- The *Calibrate sync* button sits in a footer below the info view's scrolling text, as *Quit mao* does in the popover, so it can't be clicked by accident while scrolling.
+
 ## [0.8.9] - 2026-11-22
 
 ### Fixed
