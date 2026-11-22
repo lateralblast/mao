@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-11-22
+
+### Changed
+
+- The *Calibrate sync* button moved from the popover footer to the bottom of the info view, so it is not clicked by accident in place of *Quit mao*.
+
 ## [0.8.7] - 2026-11-22
 
 ### Added

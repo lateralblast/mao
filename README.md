@@ -2,7 +2,7 @@
 
 # mao
 
-Version: 0.8.7
+Version: 0.8.8
 
 mao (Multi Audio/AirPlay Output) is a menu bar app for macOS. It sends your Mac's audio to several AirPlay receivers, such as HomePods, at once, and to one output on the Mac itself.
 
@@ -74,7 +74,7 @@ Click the mao icon in the menu bar. The popover lists the AirPlay receivers on y
 - A streaming AirPlay receiver has a volume slider under its name, with a mute button at its left. Muting sets that receiver's own volume to zero, and unmuting restores the level it had. It does not change the Mac's volume.
 - An output on this Mac has the same volume slider and mute button. They change that output's own volume. While that output is the Mac's system output, this is the Mac's volume.
 - At launch, the output on this Mac that the Mac is currently using is ticked, so the popover matches what the Mac plays through.
-- **Calibrate sync** (above Quit) lines up the AirPlay receivers. A sheet explains the method first. It needs your OK, because it uses the Mac's microphone. Then mao plays a click track through each receiver in turn, with the others muted, and records it for about 45 seconds per receiver. It sets a delay for each receiver from what it hears, and deletes the recording once measured. It needs at least two AirPlay receivers streaming, and no output on this Mac ticked. Keep the room quiet while it runs.
+- **Calibrate sync** (in the info view, opened with the info button in the popover header) lines up the AirPlay receivers. A sheet explains the method first. It needs your OK, because it uses the Mac's microphone. Then mao plays a click track through each receiver in turn, with the others muted, and records it for about 45 seconds per receiver. It sets a delay for each receiver from what it hears, and deletes the recording once measured. It needs at least two AirPlay receivers streaming, and no output on this Mac ticked. Keep the room quiet while it runs.
 - Quit mao with the button at the bottom of the popover.
 
 ## How it works

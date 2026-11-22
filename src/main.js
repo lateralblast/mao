@@ -470,7 +470,11 @@ function showCalibrationProgress(progress) {
   calibrateMessage.textContent = progress.message;
 }
 
-document.getElementById("calibrate").addEventListener("click", () => showCalibrationIntro());
+document.getElementById("calibrate").addEventListener("click", (event) => {
+  // The info view closes on any click, so keep this one from reaching it.
+  event.stopPropagation();
+  showCalibrationIntro();
+});
 document.getElementById("calibrate-cancel").addEventListener("click", () => {
   sheet.hidden = true;
 });

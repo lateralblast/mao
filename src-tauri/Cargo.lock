@@ -2123,7 +2123,7 @@ dependencies = [
 
 [[package]]
 name = "mao"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "objc2",
  "serde",
