@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-22
+
+### Fixed
+
+- Space on the right of the receiver list, so the scroll bar no longer sits against the status text and the volume percentage.
+
 ## [0.7.3] - 2026-11-22
 
 ### Changed

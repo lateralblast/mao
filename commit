@@ -49,8 +49,17 @@ body=$(awk -v heading="$heading" '
 
 message_file=$(mktemp)
 trap 'rm -f "$message_file"' EXIT
+# The subject is a summary: the first bullet of the entry, cut to 72 characters
+# at a word boundary. The body is the whole entry.
+first=$(printf '%s\n' "$body" | sed -n 's/^- //p' | head -1 | sed 's/\.$//')
+if [ -n "$first" ]; then
+    subject="$first"
+else
+    subject="Update"
+fi
+subject=$(printf '%s' "$subject" | awk '{ if (length($0) > 72) { s = substr($0, 1, 72); sub(/ [^ ]*$/, "", s); print s } else print }')
 {
-    printf 'mao %s\n\n' "$version"
+    printf '%s\n\n' "$subject"
     printf '%s\n' "$body"
     printf '\nCo-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>\n'
 } > "$message_file"

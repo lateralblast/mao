@@ -171,7 +171,7 @@ header .title {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 18px 8px 10px;
   cursor: default;
 }
 
@@ -315,7 +315,7 @@ footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 10px 8px 34px;
+  padding: 0 18px 8px 34px;
 }
 
 .receivers .volume input[type="range"] {
@@ -356,4 +356,9 @@ footer {
 
 .receivers .volume input[type="range"]:disabled {
   opacity: 0.4;
+}
+
+/* Keep the text clear of the scroll bar at the right. */
+.receivers .volume {
+  padding-right: 18px;
 }
